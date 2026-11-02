@@ -24,8 +24,11 @@ humanmock data check
 humanmock train --out checkpoints/run1
 humanmock evaluate checkpoints/run1
 python scripts/behaviour_report.py --checkpoint checkpoints/run1
-humanmock serve --checkpoint checkpoints/run1
+humanmock start
 ```
+
+`humanmock start` uses the newest trained model in `checkpoints/` that fits the body as it
+is now.
 
 ## Where data goes
 

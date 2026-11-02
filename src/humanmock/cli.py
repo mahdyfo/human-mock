@@ -1,10 +1,15 @@
-"""The humanmock command line: fetch data, train, evaluate, and serve."""
+"""The humanmock command line: start the app, fetch data, train, evaluate, and serve."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import socket
 import sys
+import threading
+import time
+import urllib.request
+import webbrowser
 from pathlib import Path
 
 
@@ -121,15 +126,72 @@ def cmd_evidence(args) -> None:
         print(f"  {path}: {note}")
 
 
-def cmd_serve(args) -> None:
+def _run_server(checkpoint: str | None, host: str, port: int, database: str) -> None:
     import os
 
     import uvicorn
 
-    if args.checkpoint:
-        os.environ["HUMANMOCK_CHECKPOINT"] = args.checkpoint
-    os.environ["HUMANMOCK_DB"] = args.database
-    uvicorn.run("humanmock.api:create_app", factory=True, host=args.host, port=args.port)
+    if checkpoint:
+        os.environ["HUMANMOCK_CHECKPOINT"] = checkpoint
+    os.environ["HUMANMOCK_DB"] = database
+    uvicorn.run("humanmock.api:create_app", factory=True, host=host, port=port)
+
+
+def cmd_serve(args) -> None:
+    _run_server(args.checkpoint, args.host, args.port, args.database)
+
+
+def newest_checkpoint(root: Path) -> Path | None:
+    """The most recent trained model that fits the body as it is now."""
+    from humanmock.checkpoint import structure_fingerprint
+
+    fingerprint = structure_fingerprint()
+    found = sorted(root.glob("*/meta.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    for meta in found:
+        try:
+            if json.loads(meta.read_text(encoding="utf8")).get("structure") == fingerprint:
+                return meta.parent
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def free_port(preferred: int, host: str = "127.0.0.1") -> int:
+    """The preferred port if it is free, and otherwise any free port."""
+    for port in (preferred, 0):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            try:
+                probe.bind((host, port))
+            except OSError:
+                continue
+            return probe.getsockname()[1]
+    raise SystemExit("No network port is free on this computer.")
+
+
+def open_when_ready(url: str, attempts: int = 240) -> None:
+    """Opens the page once the server answers, because a browser opened sooner shows an error."""
+    for _ in range(attempts):
+        try:
+            with urllib.request.urlopen(f"{url}/healthz", timeout=2):
+                webbrowser.open(url)
+                return
+        except OSError:
+            time.sleep(0.5)
+
+
+def cmd_start(args) -> None:
+    host = "127.0.0.1"
+    port = free_port(args.port, host)
+    url = f"http://{host}:{port}"
+    checkpoint = newest_checkpoint(Path(args.checkpoints))
+    if checkpoint:
+        print(f"Using the trained model in {checkpoint}.")
+    else:
+        print("Using the untrained body, because no trained model was found. docs/TRAINING.md explains how to train one.")
+    print(f"humanmock is starting at {url}. Press Ctrl+C here to stop it.")
+    if not args.no_browser:
+        threading.Thread(target=open_when_ready, args=(url,), daemon=True).start()
+    _run_server(str(checkpoint) if checkpoint else None, host, port, args.database)
 
 
 def main() -> None:
@@ -137,6 +199,13 @@ def main() -> None:
     sys.stdout.reconfigure(line_buffering=True)
     parser = argparse.ArgumentParser(prog="humanmock", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
+
+    start = sub.add_parser("start", help="Start the app and open it in your browser.")
+    start.add_argument("--port", type=int, default=8000, help="Used if free. Otherwise any free port is chosen.")
+    start.add_argument("--no-browser", action="store_true", help="Do not open a browser.")
+    start.add_argument("--checkpoints", default="checkpoints", help="Folder to look in for the newest trained model.")
+    start.add_argument("--database", default="var/sessions.db")
+    start.set_defaults(handler=cmd_start)
 
     data = sub.add_parser("data", help="Download, prepare, and check training data.")
     data.add_argument("source", choices=["all", "nhanes", "pkdb", "clinicaltrials", "synthetic", "status", "check"])

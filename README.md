@@ -57,9 +57,26 @@ need no machine learning knowledge. One cited number from a paper is a real help
 
 [CONTRIBUTING.md](CONTRIBUTING.md) shows each of these step by step.
 
-## Install
+## Run it
 
-Requires Python 3.11 or newer. On macOS or Linux, activate with `source .venv/bin/activate`.
+You need [Python 3.11 or newer](https://www.python.org/downloads/). Download this project,
+then:
+
+- **On Windows,** double-click `start.bat`.
+- **On macOS or Linux,** run `./start.sh`.
+
+The first time, it sets itself up, which takes a few minutes. After that it starts
+straight away and opens the page in your browser. Everything stays on your computer.
+Close the window, or press Ctrl+C in it, to stop.
+
+Press "Try an example", give a medicine, and move time forward. "More options" in each section holds everything else, such as other
+measurements, seeds, and inventing a drug. Click anywhere on the chart to look at that
+moment, go back to it, or try something else from it and compare the two paths.
+
+Every illness, drug, measurement, and patient parameter on the page comes from the
+body's own declarations, so anything added to the body appears there by itself.
+
+To use a command line instead, or to work on the code:
 
 ```powershell
 git clone https://github.com/mahdyfo/human-mock
@@ -68,25 +85,18 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 pytest -m "not slow"
+humanmock start
 ```
 
-## Run it
+On macOS or Linux, activate with `source .venv/bin/activate`.
 
-```powershell
-humanmock serve
-```
-
-Then open http://127.0.0.1:8000. Press "Try an example", give a medicine, and move time
-forward. "More options" in each section holds everything else, such as other
-measurements, seeds, and inventing a drug. Click anywhere on the chart to look at that
-moment, go back to it, or try something else from it and compare the two paths.
-
-Every illness, drug, measurement, and patient parameter on the page comes from the
-body's own declarations, so anything added to the body appears there by itself.
+`humanmock start` uses your newest trained model, finds a free port, and opens your
+browser. Until you train a model, it uses the untrained body, and the page says so.
 
 ## Use the API
 
-Interactive documentation is at http://127.0.0.1:8000/docs.
+Interactive documentation is at `/docs` on the same address. Use `humanmock serve` to run
+only the server, on a port you choose.
 
 Create a session. Every patient field is optional.
 
