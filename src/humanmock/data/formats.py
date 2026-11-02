@@ -260,7 +260,7 @@ def check_source(folder: Path) -> SourceCheck:
         arms = set(subjects.loc[subjects["kind"] == "arm", "subject_id"])
         readings = observations[observations["subject_id"].isin(arms)]
         if len(readings) and ("sd" not in readings or readings["sd"].isna().any()):
-            report.notes.append("Some group averages have no sd, so training treats them as almost exact.")
+            report.notes.append("Some group averages have no sd, so training uses its learned noise for them. Add an sd if the source reports one.")
     return report
 
 
