@@ -44,6 +44,22 @@ def cmd_data(args) -> None:
 
         print("Synthetic practice data. This is not evidence about real humans.")
         print(" ", generate(root / "observations" / "synthetic", args.subjects, args.seed))
+    if args.source == "check":
+        from humanmock.data.formats import check_source
+
+        observations = root / "observations"
+        folders = [Path(args.target)] if args.target else sorted(p for p in observations.iterdir() if p.is_dir())
+        failed = False
+        for folder in folders:
+            report = check_source(folder)
+            print(f"{report.name}: {report.subjects} subjects, {report.measurements} measurements")
+            for error in report.errors:
+                failed = True
+                print(f"  ERROR: {error}")
+            for note in report.notes:
+                print(f"  note: {note}")
+        if failed:
+            raise SystemExit(1)
     if args.source == "status":
         from humanmock.data.formats import load_records
 
@@ -95,6 +111,16 @@ def cmd_evaluate(args) -> None:
     _print_scores(meta["scores"])
 
 
+def cmd_evidence(args) -> None:
+    from humanmock.knowledge import RAW, evidence_gaps
+
+    gaps, total = evidence_gaps(RAW)
+    print(f"{len(gaps)} of {total} constants in physiology.yaml have no cited source yet.")
+    print("Replacing one with a cited value is a useful first contribution. See CONTRIBUTING.md.\n")
+    for path, note in gaps:
+        print(f"  {path}: {note}")
+
+
 def cmd_serve(args) -> None:
     import os
 
@@ -112,8 +138,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="humanmock", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    data = sub.add_parser("data", help="Download and prepare training data.")
-    data.add_argument("source", choices=["all", "nhanes", "pkdb", "clinicaltrials", "synthetic", "status"])
+    data = sub.add_parser("data", help="Download, prepare, and check training data.")
+    data.add_argument("source", choices=["all", "nhanes", "pkdb", "clinicaltrials", "synthetic", "status", "check"])
+    data.add_argument("target", nargs="?", default=None, help="With check, the one folder to check.")
     data.add_argument("--root", default="data")
     data.add_argument("--drugs", nargs="+", default=["paracetamol"])
     data.add_argument("--include-closed", action="store_true", help="Also fetch studies with closed licences.")
@@ -145,6 +172,9 @@ def main() -> None:
     evaluate = sub.add_parser("evaluate", help="Show how a trained model scored.")
     evaluate.add_argument("checkpoint")
     evaluate.set_defaults(handler=cmd_evaluate)
+
+    evidence = sub.add_parser("evidence", help="List constants that still need a cited source.")
+    evidence.set_defaults(handler=cmd_evidence)
 
     serve = sub.add_parser("serve", help="Start the API.")
     serve.add_argument("--checkpoint", default=None, help="Trained model folder. Without it, the untrained body is used.")

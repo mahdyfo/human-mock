@@ -2,7 +2,7 @@
 
 import jax.numpy as jnp
 
-from .base import FREE, Organ, StateDef
+from .base import FREE, Measurement, Organ, Share, StateDef
 
 
 def derivative(s, c, e):
@@ -27,9 +27,14 @@ def observables(s, c, e):
 ORGAN = Organ(
     name="thermoregulation",
     description="Fever follows a cytokine-driven set point, and antipyretic drugs lower that drive.",
-    states=(StateDef("temperature", FREE, rate_scale=0.5, init=36.7, center=37.0, scale=1.0),),
+    states=(StateDef("temperature", FREE, rate_scale=0.5, init_from="body_temp_c", center=37.0, scale=1.0),),
     neighbors=("inflammation", "pharmacology"),
     derivative=derivative,
     observables=observables,
-    observable_names=("temperature_c", "heart_rate_bpm", "respiratory_rate_bpm"),
+    measurements=(
+        Measurement("temperature_c", "degrees C", noise=0.3, neural_range=0.5),
+        Measurement("heart_rate_bpm", "beats per minute", noise=6.0, neural_range=8.0),
+        Measurement("respiratory_rate_bpm", "breaths per minute", noise=2.0, neural_range=3.0),
+    ),
+    shares=(Share("fever_fraction", "temperature_c", 38.0, 0.15, noise=0.1),),
 )

@@ -20,11 +20,12 @@ import numpy as np
 import pandas as pd
 
 from humanmock.knowledge import KNOWLEDGE, MAX_DRUGS
-from humanmock.model import COVARIATES, OBS_INDEX
+from humanmock.model import COVARIATES, OBS_INDEX, SHARES
 from humanmock.population import Population
 
 KNOWN_COVARIATES = tuple(c for c in COVARIATES if c != "sex_female") + ("sex",)
 NO_EXPOSURE = -10.0
+SOURCE_FILES = ("subjects.csv", "events.csv", "observations.csv")
 
 
 class DataFormatError(ValueError):
@@ -71,8 +72,49 @@ def _text(value: Any) -> str:
     return "" if value is None or (isinstance(value, float) and np.isnan(value)) else str(value).strip()
 
 
+def _table_errors(subjects: pd.DataFrame, events: pd.DataFrame, observations: pd.DataFrame) -> list[str]:
+    """Finds rows that would otherwise be dropped silently or poison training with NaN."""
+    errors: list[str] = []
+    known = set(subjects["subject_id"])
+
+    def first_row(frame: pd.DataFrame, bad: pd.Series) -> int:
+        # The file's own row number, counting its header as row 1.
+        return int(frame.index[bad][0]) + 2
+
+    for label, frame in (("events.csv", events), ("observations.csv", observations)):
+        strangers = sorted(str(s) for s in set(frame["subject_id"]) - known)
+        if strangers:
+            errors.append(f"{label} names subjects that are not in subjects.csv: {strangers[:5]}.")
+        times = pd.to_numeric(frame["time_h"], errors="coerce")
+        bad = times.isna() | (times < 0)
+        if bad.any():
+            errors.append(f"{label} row {first_row(frame, bad)} needs a time_h of 0 or more. Time zero is the first treatment.")
+
+    doses = events[events["type"] == "dose"]
+    if len(doses):
+        amounts = pd.to_numeric(doses["dose_mg"], errors="coerce") if "dose_mg" in doses else pd.Series(np.nan, index=doses.index)
+        bad = amounts.isna() | (amounts <= 0)
+        if bad.any():
+            errors.append(f"events.csv row {first_row(doses, bad)} is a dose, so it needs a dose_mg above 0.")
+
+    values = pd.to_numeric(observations["value"], errors="coerce")
+    bad = values.isna()
+    if bad.any():
+        errors.append(f"observations.csv row {first_row(observations, bad)} needs a numeric value.")
+    if "sd" in observations:
+        spread = pd.to_numeric(observations["sd"], errors="coerce")
+        bad = spread < 0
+        if bad.any():
+            errors.append(f"observations.csv row {first_row(observations, bad)} has a negative sd.")
+    shares = observations["variable"].isin([s.name for s in SHARES])
+    bad = shares & ((values < 0) | (values > 1))
+    if bad.any():
+        errors.append(f"observations.csv row {first_row(observations, bad)} is a share of people, so it must be between 0 and 1.")
+    return errors
+
+
 def read_source(folder: Path) -> list[Record]:
-    for name in ("subjects.csv", "events.csv", "observations.csv"):
+    for name in SOURCE_FILES:
         if not (folder / name).exists():
             return []
     subjects = pd.read_csv(folder / "subjects.csv", dtype={"subject_id": str, "study_id": str})
@@ -90,6 +132,9 @@ def read_source(folder: Path) -> list[Record]:
             raise DataFormatError(f"{folder / label} is missing columns {missing}.")
     if subjects["subject_id"].duplicated().any():
         raise DataFormatError(f"{folder / 'subjects.csv'} repeats a subject_id.")
+    errors = _table_errors(subjects, events, observations)
+    if errors:
+        raise DataFormatError(f"{folder}: " + " ".join(errors))
 
     events_by = dict(tuple(events.groupby("subject_id")))
     obs_by = dict(tuple(observations.groupby("subject_id")))
@@ -169,6 +214,54 @@ def read_source(folder: Path) -> list[Record]:
             )
         )
     return records
+
+
+@dataclass
+class SourceCheck:
+    """What a contributor needs to know about one data folder before training on it."""
+
+    name: str
+    subjects: int = 0
+    measurements: int = 0
+    errors: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+
+def check_source(folder: Path) -> SourceCheck:
+    """Checks one data folder. Errors stop training, and notes are worth fixing."""
+    report = SourceCheck(folder.name)
+    present = [name for name in SOURCE_FILES if (folder / name).exists()]
+    if not present:
+        report.notes.append("No data files yet.")
+        return report
+    missing = [name for name in SOURCE_FILES if name not in present]
+    if missing:
+        report.errors.append(f"Missing {', '.join(missing)}. A source needs all of {', '.join(SOURCE_FILES)}.")
+        return report
+    try:
+        records = read_source(folder)
+    except (DataFormatError, ValueError) as exc:
+        report.errors.append(str(exc))
+        return report
+    report.subjects = len(records)
+    report.measurements = sum(len(r.obs_value) for r in records)
+
+    subjects = pd.read_csv(folder / "subjects.csv", dtype={"subject_id": str})
+    observations = pd.read_csv(folder / "observations.csv", dtype={"subject_id": str})
+    if subjects.empty:
+        report.notes.append("subjects.csv has no rows.")
+        return report
+    unmeasured = set(subjects["subject_id"]) - set(observations["subject_id"])
+    if unmeasured:
+        report.notes.append(f"{len(unmeasured)} subjects have no measurements, so training ignores them.")
+    if "notes" not in subjects or subjects["notes"].isna().any():
+        report.notes.append("Some subjects have empty notes. Please say where the numbers came from.")
+    if "kind" in subjects:
+        arms = set(subjects.loc[subjects["kind"] == "arm", "subject_id"])
+        readings = observations[observations["subject_id"].isin(arms)]
+        if len(readings) and ("sd" not in readings or readings["sd"].isna().any()):
+            report.notes.append("Some group averages have no sd, so training treats them as almost exact.")
+    return report
 
 
 def load_records(root: Path, include_synthetic: bool = False, only: list[str] | None = None) -> list[Record]:

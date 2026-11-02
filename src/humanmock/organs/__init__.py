@@ -1,7 +1,9 @@
 """The body is the ordered list of organ modules below.
 
 To add biology, write a new module that exposes ORGAN and add it to this list.
-Signals run in this order, so an organ can read signals from organs above it.
+Signals run in this order, so an organ's signals can read signals from organs
+above it. Its derivative and observables can read any signal. Add new organs at
+the end unless their signals have to feed an existing organ's signals.
 """
 
 from . import immunity, inflammation, pathogen, pharmacology, systemic, thermoregulation, throat

@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 
 from humanmock.engine import DrugBook, Simulator
-from humanmock.knowledge import KNOWLEDGE
+from humanmock.knowledge import DRUG_FIELDS, KNOWLEDGE
 from humanmock.model import LAYOUT, OBS_INDEX, BodyModel
 
 class HiddenTruthBody(BodyModel):
@@ -48,7 +48,7 @@ def hidden_truth_model(key) -> HiddenTruthBody:
         log_sys[KNOWLEDGE.sys_names.index(name)] = value
     fields["log_sys"] = jnp.asarray(log_sys)
     log_drug = np.array(fields["log_drug"])
-    log_drug[KNOWLEDGE.drug_slot("paracetamol"), 3] = np.log(1.25)  # Field 3 is clearance.
+    log_drug[KNOWLEDGE.drug_slot("paracetamol"), DRUG_FIELDS.index("cl_ref_l_h")] = np.log(1.25)
     fields["log_drug"] = jnp.asarray(log_drug)
     return HiddenTruthBody(**fields)
 

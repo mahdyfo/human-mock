@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.eqx binary
+*.png binary
+*.db binary

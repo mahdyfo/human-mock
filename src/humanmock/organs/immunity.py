@@ -2,11 +2,7 @@
 
 import jax.numpy as jnp
 
-from humanmock.knowledge import KNOWLEDGE
-
-from .base import FRACTION, Organ, StateDef
-
-P = KNOWLEDGE.n_pathogens
+from .base import FRACTION, PER_PATHOGEN, Organ, StateDef
 
 
 def signals(s, c, e):
@@ -29,8 +25,8 @@ ORGAN = Organ(
     description="Innate response, pathogen-specific effectors, and pathogen-specific memory.",
     states=(
         StateDef("innate", FRACTION, rate_scale=0.05),
-        StateDef("effector", FRACTION, rate_scale=0.02, size=P),
-        StateDef("memory", FRACTION, rate_scale=0.002, size=P),
+        StateDef("effector", FRACTION, rate_scale=0.02, per=PER_PATHOGEN),
+        StateDef("memory", FRACTION, rate_scale=0.002, per=PER_PATHOGEN),
     ),
     neighbors=("pathogen", "inflammation"),
     derivative=derivative,

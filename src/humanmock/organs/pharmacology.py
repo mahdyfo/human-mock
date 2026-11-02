@@ -4,7 +4,7 @@ import jax.numpy as jnp
 
 from humanmock.knowledge import MAX_DRUGS
 
-from .base import AMOUNT, Organ, StateDef, hill
+from .base import AMOUNT, PER_DRUG, Measurement, Organ, StateDef, hill
 
 
 def signals(s, c, e):
@@ -35,19 +35,21 @@ def derivative(s, c, e):
 
 
 def observables(s, c, e):
-    return {"conc": jnp.maximum(s["conc"], 0.0)}
+    conc = jnp.maximum(s["conc"], 0.0)
+    return {f"conc_slot{i}": conc[i] for i in range(MAX_DRUGS)}
 
 
 ORGAN = Organ(
     name="pharmacology",
     description="One-compartment oral drug kinetics per drug slot, with renal and hepatic clearance.",
     states=(
-        StateDef("gut", AMOUNT, rate_scale=0.5, size=MAX_DRUGS, scale=500.0),
-        StateDef("conc", AMOUNT, rate_scale=0.5, size=MAX_DRUGS, scale=5.0),
+        StateDef("gut", AMOUNT, rate_scale=0.5, per=PER_DRUG, scale=500.0),
+        StateDef("conc", AMOUNT, rate_scale=0.5, per=PER_DRUG, scale=5.0),
     ),
     neighbors=("systemic",),
     derivative=derivative,
     signals=signals,
     observables=observables,
-    observable_names=tuple(f"conc_slot{i}" for i in range(MAX_DRUGS)),
+    # Responses report drug levels by name, under drug_levels_mg_l.
+    measurements=tuple(Measurement(f"conc_slot{i}", "mg per litre", public=False) for i in range(MAX_DRUGS)),
 )

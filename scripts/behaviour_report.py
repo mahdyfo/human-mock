@@ -14,7 +14,10 @@ import time
 import numpy as np
 
 from humanmock.engine import DrugBook, Simulator
+from humanmock.knowledge import KNOWLEDGE
 from humanmock.model import OBS_INDEX
+
+AMOX_LEVEL = f"conc_slot{KNOWLEDGE.drug_slot('amoxicillin')}"
 
 ADULT = {"age_years": 30, "sex": "male", "weight_kg": 75}
 DAYS = (1, 2, 3, 5, 7, 10, 14, 21)
@@ -94,7 +97,7 @@ def run(sim: Simulator, n: int) -> None:
     after = sim.observe(p1, book)
     for name in ("throat_pain_0_10", "temperature_c", "throat_culture_log10_cfu"):
         print(f" {name}: {np.nanmedian(before[:, OBS_INDEX[name]]):.2f} then {np.nanmedian(after[:, OBS_INDEX[name]]):.2f}")
-    print(f" amoxicillin level at 1 h: {np.nanmedian(after[:, OBS_INDEX['conc_slot0']]):.2f} mg/L, label peak range 5.5 to 7.5")
+    print(f" amoxicillin level at 1 h: {np.nanmedian(after[:, OBS_INDEX[AMOX_LEVEL]]):.2f} mg/L, label peak range 5.5 to 7.5")
 
     print("\n== Ibuprofen 400 mg during a fever: temperature should fall, then return")
     pf, _ = sim.create_particles(ADULT, strep, book, n, 1)
@@ -128,7 +131,7 @@ def run(sim: Simulator, n: int) -> None:
     for label, patient in (("normal", ADULT), ("impaired", weak)):
         pk, _ = sim.create_particles(patient, [], book, n, 1)
         pk = sim.advance(pk, book, 6.0, [{"type": "dose", "drug": "amoxicillin", "dose_mg": 500, "at_hours": 0}])
-        print(f" {label}: {np.nanmedian(sim.observe(pk, book)[:, OBS_INDEX['conc_slot0']]):.2f} mg/L at 6 h")
+        print(f" {label}: {np.nanmedian(sim.observe(pk, book)[:, OBS_INDEX[AMOX_LEVEL]]):.2f} mg/L at 6 h")
 
     print("\n== Overdose: paracetamol 15 g should raise organ stress far above 1 g")
     for grams in (1, 15):

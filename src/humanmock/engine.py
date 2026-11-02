@@ -15,46 +15,24 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from humanmock.knowledge import DRUG_FIELDS, KNOWLEDGE, MAX_DRUGS, build_drug_row
+from humanmock.knowledge import DRUG_FIELDS, KNOWLEDGE, MAX_DRUGS, SPARE_DRUG_SLOTS, build_drug_row
 from humanmock.model import (
     COV_INDEX,
-    FRACTIONS,
     LAYOUT,
     N_LATENT,
     OBS_INDEX,
     OBS_NAMES,
+    PUBLIC_OBSERVABLES,
     SERVE_SOLVER,
+    SHARES,
     BodyModel,
     SolverConfig,
     advance,
 )
+from humanmock.organs.base import PER_DRUG
 from humanmock.population import PatientError, Population
 
 NO_EXPOSURE = -10.0
-PUBLIC_OBSERVABLES: dict[str, str] = {
-    "temperature_c": "degrees C",
-    "heart_rate_bpm": "beats per minute",
-    "respiratory_rate_bpm": "breaths per minute",
-    "throat_pain_0_10": "score 0 to 10",
-    "cough_0_10": "score 0 to 10",
-    "fatigue_0_10": "score 0 to 10",
-    "diarrhea_0_10": "score 0 to 10",
-    "wbc_k_ul": "thousand cells per microlitre",
-    "crp_mg_l": "mg per litre",
-    "throat_culture_log10_cfu": "log10 colony forming units",
-    "toxicity_index_0_1": "index 0 to 1",
-}
-INTERNAL_STATES = (
-    "log_surface",
-    "log_reservoir",
-    "innate",
-    "effector",
-    "memory",
-    "cytokine",
-    "tissue",
-    "dysbiosis",
-    "toxicity",
-)
 
 
 @eqx.filter_jit
@@ -147,7 +125,7 @@ class DrugBook:
             if name in names:
                 raise PatientError(f"Drug '{name}' already exists.")
             if len(names) >= MAX_DRUGS:
-                raise PatientError(f"A session can hold at most {MAX_DRUGS} drugs.")
+                raise PatientError(f"A session can define at most {SPARE_DRUG_SLOTS} hypothetical drugs.")
             table[len(names)] = build_drug_row(spec)
             names.append(name)
         return DrugBook(names=names, table=table, limits=limits)
@@ -337,19 +315,18 @@ class Simulator:
                 levels[name] = spread(column)
         result["drug_levels_mg_l"] = levels
         result["share_of_people"] = {
-            name.replace("_fraction", ""): round(float((good[:, OBS_INDEX[src]] > thr).mean()), 3)
-            for name, (src, thr, _) in FRACTIONS.items()
+            share.name.replace("_fraction", ""): round(float((good[:, OBS_INDEX[share.measurement]] > share.threshold).mean()), 3)
+            for share in SHARES
         }
         if include_internal:
             internal: dict[str, Any] = {}
             y = p.y[healthy]
-            for name in INTERNAL_STATES:
-                _, off, size, _, _ = LAYOUT.by_name[name]
-                if size == 1:
+            for name, off, _, st, _ in LAYOUT.entries:
+                if st.per is None:
                     internal[name] = spread(y[:, off])
                 else:
-                    labels = KNOWLEDGE.path_names if size == KNOWLEDGE.n_pathogens else book.names
-                    internal[name] = {labels[j]: spread(y[:, off + j]) for j in range(size)}
+                    labels = book.names if st.per == PER_DRUG else KNOWLEDGE.path_names
+                    internal[name] = {label: spread(y[:, off + j]) for j, label in enumerate(labels)}
             latents = y[:, LAYOUT.physio_size :]
             internal["memory_neuron_activity"] = spread(np.abs(latents).max(axis=1))
             internal["memory_neurons_per_organ"] = N_LATENT

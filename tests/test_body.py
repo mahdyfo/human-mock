@@ -7,11 +7,12 @@ import pytest
 
 from humanmock.engine import DrugBook, Simulator
 from humanmock.knowledge import KNOWLEDGE, MAX_DRUGS
-from humanmock.model import LAYOUT, OBS_INDEX, OBS_NAMES, BodyModel
+from humanmock.model import COV_CENTER, LAYOUT, OBS_INDEX, OBS_NAMES, BodyModel
 
 ADULT = {"age_years": 30, "sex": "male", "weight_kg": 75, "creatinine_mg_dl": 0.9}
 STREP = [{"name": "strep_a", "days_since_symptom_onset": 1.0}]
 AMOX = {"type": "dose", "drug": "amoxicillin", "dose_mg": 500, "at_hours": 0}
+AMOX_LEVEL = f"conc_slot{KNOWLEDGE.drug_slot('amoxicillin')}"
 
 
 def median(sim, book, p, name):
@@ -30,7 +31,7 @@ def treat(sim, book, p, drug, mg, every, count, days):
 
 def test_every_neural_output_starts_at_zero():
     model = BodyModel.create(jax.random.PRNGKey(3))
-    cov = jnp.array([30, 0, 75, 175, 0.9, 22, 70, 14, 7, 1, 36.7, 120, 75, 1, 1], dtype=jnp.float32)
+    cov = jnp.asarray(COV_CENTER)
     c = model.context(
         cov,
         jnp.zeros(len(KNOWLEDGE.sys_names)),
@@ -69,7 +70,7 @@ def test_time_steps_are_consistent(sim, book):
     for _ in range(8):
         stepped = sim.advance(stepped, book, 1.0, [])
     a, b = sim.observe(once, book), sim.observe(stepped, book)
-    for name in ("temperature_c", "throat_pain_0_10", "conc_slot0", "throat_culture_log10_cfu"):
+    for name in ("temperature_c", "throat_pain_0_10", AMOX_LEVEL, "throat_culture_log10_cfu"):
         assert np.allclose(a[:, OBS_INDEX[name]], b[:, OBS_INDEX[name]], rtol=0.02, atol=0.02), name
 
 
@@ -85,11 +86,11 @@ def test_amoxicillin_peak_is_within_the_label_range(sim, book):
     p, _ = sim.create_particles(ADULT, [], book, 32, 1)
     peaks = []
     current = sim.advance(p, book, 1.0, [AMOX])
-    peaks.append(median(sim, book, current, "conc_slot0"))
+    peaks.append(median(sim, book, current, AMOX_LEVEL))
     current = sim.advance(current, book, 0.5, [])
-    peaks.append(median(sim, book, current, "conc_slot0"))
+    peaks.append(median(sim, book, current, AMOX_LEVEL))
     current = sim.advance(current, book, 0.5, [])
-    peaks.append(median(sim, book, current, "conc_slot0"))
+    peaks.append(median(sim, book, current, AMOX_LEVEL))
     assert 5.0 <= max(peaks) <= 8.0  # The label reports 5.5 to 7.5 mg/L at 1 to 2 h.
 
 
@@ -98,7 +99,7 @@ def test_one_hour_after_a_dose_symptoms_have_not_moved(sim, book):
     after = sim.advance(p, book, 1.0, [AMOX])
     assert abs(median(sim, book, after, "throat_pain_0_10") - median(sim, book, p, "throat_pain_0_10")) < 0.3
     assert abs(median(sim, book, after, "temperature_c") - median(sim, book, p, "temperature_c")) < 0.2
-    assert median(sim, book, after, "conc_slot0") > 3.0
+    assert median(sim, book, after, AMOX_LEVEL) > 3.0
 
 
 def test_antibiotics_clear_bacteria_and_speed_recovery(sim, book):
@@ -159,7 +160,7 @@ def test_weak_kidneys_keep_a_renally_cleared_drug_longer(sim, book):
     impaired, _ = sim.create_particles(dict(ADULT, age_years=78, creatinine_mg_dl=3.0), [], book, 16, 1)
     a = sim.advance(normal, book, 6.0, [AMOX])
     b = sim.advance(impaired, book, 6.0, [AMOX])
-    assert median(sim, book, b, "conc_slot0") > 2 * median(sim, book, a, "conc_slot0")
+    assert median(sim, book, b, AMOX_LEVEL) > 2 * median(sim, book, a, AMOX_LEVEL)
 
 
 def test_overdose_shows_organ_stress(sim, book):
@@ -201,7 +202,7 @@ def test_missing_values_reflect_who_the_person_is(sim, book):
 
 def test_observable_names_match_what_organs_return():
     model = BodyModel.create(jax.random.PRNGKey(0))
-    cov = jnp.array([30, 0, 75, 175, 0.9, 22, 70, 14, 7, 1, 36.7, 120, 75, 1, 1], dtype=jnp.float32)
+    cov = jnp.asarray(COV_CENTER)
     c = model.context(
         cov,
         jnp.zeros(len(KNOWLEDGE.sys_names)),

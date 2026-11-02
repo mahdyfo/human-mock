@@ -2,7 +2,7 @@
 
 import jax.numpy as jnp
 
-from .base import LEVEL, Organ, StateDef
+from .base import LEVEL, Measurement, Organ, StateDef
 
 
 def derivative(s, c, e):
@@ -25,11 +25,14 @@ ORGAN = Organ(
     description="Cytokine drive, C-reactive protein, and white cell count.",
     states=(
         StateDef("cytokine", LEVEL, rate_scale=0.1, scale=1.0),
-        StateDef("crp", LEVEL, rate_scale=2.0, init=1.0, center=10.0, scale=30.0),
-        StateDef("wbc", LEVEL, rate_scale=0.3, init=7.0, center=7.0, scale=4.0),
+        StateDef("crp", LEVEL, rate_scale=2.0, init_from="crp_mg_l", center=10.0, scale=30.0),
+        StateDef("wbc", LEVEL, rate_scale=0.3, init_from="wbc_k_ul", center=7.0, scale=4.0),
     ),
     neighbors=("immunity", "throat", "thermoregulation"),
     derivative=derivative,
     observables=observables,
-    observable_names=("crp_mg_l", "wbc_k_ul"),
+    measurements=(
+        Measurement("crp_mg_l", "mg per litre", noise=8.0, neural_range=15.0),
+        Measurement("wbc_k_ul", "thousand cells per microlitre", noise=1.5, neural_range=2.0),
+    ),
 )

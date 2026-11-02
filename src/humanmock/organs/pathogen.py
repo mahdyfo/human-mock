@@ -7,14 +7,11 @@ re-seed the surface if treatment stops early.
 
 import jax.numpy as jnp
 
-from humanmock.knowledge import KNOWLEDGE
-
-from .base import COUNT, Organ, StateDef, sigmoid
+from .base import COUNT, PER_PATHOGEN, Measurement, Organ, Share, StateDef, sigmoid
 
 LN10 = 2.302585
 EXTINCT_LOG10 = -1.0
 EXTINCTION_DRIFT = 0.5  # log10 units per hour once a population is too small to persist.
-P = KNOWLEDGE.n_pathogens
 
 
 def _exchange(rate, donor, receiver, donor_est):
@@ -74,12 +71,13 @@ ORGAN = Organ(
     name="pathogen",
     description="Pathogen load by slot on the surface and in a protected reservoir.",
     states=(
-        StateDef("log_surface", COUNT, rate_scale=0.3, size=P, init=EXTINCT_LOG10, center=3.0, scale=4.0),
-        StateDef("log_reservoir", COUNT, rate_scale=0.1, size=P, init=EXTINCT_LOG10, center=1.0, scale=3.0),
+        StateDef("log_surface", COUNT, rate_scale=0.3, per=PER_PATHOGEN, init=EXTINCT_LOG10, center=3.0, scale=4.0),
+        StateDef("log_reservoir", COUNT, rate_scale=0.1, per=PER_PATHOGEN, init=EXTINCT_LOG10, center=1.0, scale=3.0),
     ),
     neighbors=("pharmacology", "immunity", "throat"),
     derivative=derivative,
     signals=signals,
     observables=observables,
-    observable_names=("throat_culture_log10_cfu",),
+    measurements=(Measurement("throat_culture_log10_cfu", "log10 colony forming units", noise=1.0),),
+    shares=(Share("culture_positive_fraction", "throat_culture_log10_cfu", 2.0, 0.3, noise=0.05),),
 )

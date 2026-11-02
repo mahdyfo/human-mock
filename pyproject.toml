@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,6 +8,8 @@ version = "0.1.0"
 description = "Open, trainable simulator of human body behaviour: mechanistic organs plus neural corrections, served through a session API."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
   "jax>=0.4.30",
   "equinox>=0.11",
@@ -24,6 +26,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+
+[project.urls]
+Repository = "https://github.com/mahdyfo/human-mock"
+Issues = "https://github.com/mahdyfo/human-mock/issues"
 
 [project.scripts]
 humanmock = "humanmock.cli:main"

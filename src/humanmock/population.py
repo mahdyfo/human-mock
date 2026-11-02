@@ -12,34 +12,19 @@ from typing import Any
 
 import numpy as np
 
-from humanmock.knowledge import load_json_resource
+from humanmock.knowledge import KNOWLEDGE, load_json_resource
 from humanmock.model import COV_INDEX, COVARIATES
 
-MIN_AGE = 12.0
-MAX_AGE = 90.0
+MIN_AGE = float(KNOWLEDGE.patient["age_years"]["min"])
+MAX_AGE = float(KNOWLEDGE.patient["age_years"]["max"])
 # Hard limits only reject impossible samples and do not describe a healthy range.
 LIMITS = {
-    "weight_kg": (25.0, 250.0),
-    "height_cm": (120.0, 220.0),
-    "creatinine_mg_dl": (0.2, 12.0),
-    "alt_u_l": (3.0, 400.0),
-    "wbc_k_ul": (1.5, 25.0),
-    "crp_mg_l": (0.05, 60.0),
-    "heart_rate_bpm": (40.0, 130.0),
-    "systolic_bp_mmhg": (70.0, 220.0),
-    "diastolic_bp_mmhg": (30.0, 130.0),
-    "respiratory_rate_bpm": (8.0, 30.0),
-    "body_temp_c": (35.5, 37.8),
-    "immune_function": (0.05, 2.0),
-    "hepatic_function": (0.05, 1.5),
+    name: (float(entry["min"]), float(entry["max"]))
+    for name, entry in KNOWLEDGE.patient.items()
+    if "min" in entry and name != "age_years"
 }
-# Not measured by NHANES, so these spreads are assumptions.
-INDEPENDENT = {
-    "respiratory_rate_bpm": ("normal", 15.0, 2.0),
-    "body_temp_c": ("normal", 36.7, 0.25),
-    "immune_function": ("lognormal", 0.0, 0.2),
-    "hepatic_function": ("lognormal", 0.0, 0.1),
-}
+# Parameters NHANES does not cover are sampled independently from a declared prior.
+INDEPENDENT = {name: tuple(entry["prior"]) for name, entry in KNOWLEDGE.patient.items() if "prior" in entry}
 
 
 class PatientError(ValueError):
@@ -60,6 +45,12 @@ class Population:
         self.age_edges = np.array(hist["edges"], dtype=float)
         self.age_weights = np.array(hist["weights"], dtype=float)
         self.fraction_female = float(table["adult_fraction_female"])
+        for name in COVARIATES:
+            if name not in ("age_years", "sex_female") and name not in self.features and name not in INDEPENDENT:
+                raise ValueError(
+                    f"Patient parameter {name} has no way to be sampled. Give it a prior in physiology.yaml, "
+                    "or add it to the NHANES fit in humanmock/data/nhanes.py."
+                )
 
     def _band(self, age: float) -> str:
         for low, high in self.age_bands:

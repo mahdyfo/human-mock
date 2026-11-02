@@ -2,7 +2,7 @@
 
 import jax.numpy as jnp
 
-from .base import FRACTION, LEVEL, Organ, StateDef
+from .base import FRACTION, LEVEL, Measurement, Organ, Share, StateDef
 
 
 def derivative(s, c, e):
@@ -36,5 +36,9 @@ ORGAN = Organ(
     neighbors=("pathogen", "inflammation"),
     derivative=derivative,
     observables=observables,
-    observable_names=("throat_pain_0_10", "cough_0_10"),
+    measurements=(
+        Measurement("throat_pain_0_10", "score 0 to 10", noise=1.0, neural_range=2.0),
+        Measurement("cough_0_10", "score 0 to 10", noise=1.0, neural_range=2.0),
+    ),
+    shares=(Share("sore_throat_fraction", "throat_pain_0_10", 2.0, 0.5, noise=0.1),),
 )

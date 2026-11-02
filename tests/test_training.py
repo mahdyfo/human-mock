@@ -14,6 +14,7 @@ from humanmock.checkpoint import load_simulator, save_checkpoint, structure_fing
 from humanmock.data.formats import (
     DataFormatError,
     assign_splits,
+    check_source,
     load_records,
     read_source,
     sample_people,
@@ -21,10 +22,15 @@ from humanmock.data.formats import (
 )
 from humanmock.data.synthetic import generate
 from humanmock.engine import DrugBook
+from humanmock.knowledge import KNOWLEDGE
 from humanmock.model import OBS_INDEX, TRAIN_SOLVER, BodyModel
 from humanmock.training.train import TrainConfig, evaluate_loss, per_variable_error, predict_subject, train_member, Batcher
 
 LITERATURE = Path(__file__).parent.parent / "data" / "observations"
+
+
+def slot_name(drug: str) -> str:
+    return f"conc_slot{KNOWLEDGE.drug_slot(drug)}"
 
 
 def write_source(folder: Path, subjects: list[dict], events: list[dict], observations: list[dict]) -> Path:
@@ -46,10 +52,10 @@ def test_a_custom_csv_source_is_read_correctly(tmp_path):
     )
     record = read_source(folder)[0]
     assert record.known == {"age_years": 40.0, "sex": "female"}
-    assert record.onset_days == 2.0 and record.path_slot == 0
+    assert record.onset_days == 2.0 and record.path_slot == KNOWLEDGE.path_names.index("strep_a")
     assert list(record.times) == [0.0, 2.0] and list(record.dt) == [0.0, 2.0]
-    assert record.oral[0, 0] == 500.0
-    assert record.obs_var[0] == OBS_INDEX["conc_slot0"]
+    assert record.oral[0, KNOWLEDGE.drug_slot("amoxicillin")] == 500.0
+    assert record.obs_var[0] == OBS_INDEX[slot_name("amoxicillin")]
 
 
 @pytest.mark.parametrize(
@@ -72,10 +78,63 @@ def test_bad_data_is_rejected_with_a_clear_message(tmp_path, bad_subject, bad_ev
         read_source(folder)
 
 
+@pytest.mark.parametrize(
+    "bad_subject,bad_event,bad_obs,message",
+    [
+        ({}, {"subject_id": "ghost"}, {}, "not in subjects.csv"),
+        ({}, {}, {"subject_id": "ghost"}, "not in subjects.csv"),
+        ({}, {"time_h": -1}, {}, "time_h of 0 or more"),
+        ({}, {}, {"time_h": "soon"}, "time_h of 0 or more"),
+        ({}, {"dose_mg": None}, {}, "needs a dose_mg above 0"),
+        ({}, {"dose_mg": -5}, {}, "needs a dose_mg above 0"),
+        ({}, {}, {"value": "high"}, "numeric value"),
+        ({}, {}, {"variable": "fever_fraction", "value": 40}, "between 0 and 1"),
+        ({}, {}, {"sd": -1}, "negative sd"),
+    ],
+)
+def test_rows_that_would_corrupt_training_are_refused(tmp_path, bad_subject, bad_event, bad_obs, message):
+    folder = write_source(
+        tmp_path / "bad",
+        [{"subject_id": "a", "study_id": "s", **bad_subject}],
+        [{"subject_id": "a", "time_h": 0, "type": "dose", "drug": "amoxicillin", "dose_mg": 500, **bad_event}],
+        [{"subject_id": "a", "time_h": 1, "variable": "temperature_c", "value": 37.0, **bad_obs}],
+    )
+    with pytest.raises(DataFormatError, match=message):
+        read_source(folder)
+    assert any(message in error for error in check_source(folder).errors)
+
+
+def test_the_data_check_explains_incomplete_and_empty_folders(tmp_path):
+    (tmp_path / "empty").mkdir()
+    assert check_source(tmp_path / "empty").errors == []
+    partial = tmp_path / "partial"
+    partial.mkdir()
+    (partial / "subjects.csv").write_text("subject_id,study_id\na,s\n", encoding="utf8")
+    assert "events.csv" in check_source(partial).errors[0]
+
+
+def test_the_data_check_notes_what_is_worth_fixing(tmp_path):
+    folder = write_source(
+        tmp_path / "thin",
+        [{"subject_id": "a", "study_id": "s", "kind": "arm"}, {"subject_id": "b", "study_id": "s", "kind": "arm"}],
+        [],
+        [{"subject_id": "a", "time_h": 1, "variable": "fever_fraction", "value": 0.4}],
+    )
+    report = check_source(folder)
+    text = " ".join(report.notes)
+    assert report.errors == [] and report.subjects == 1 and report.measurements == 1
+    assert "no measurements" in text and "empty notes" in text and "no sd" in text
+
+
+def test_every_committed_data_source_passes_the_check():
+    for folder in sorted(p for p in LITERATURE.iterdir() if p.is_dir()):
+        assert check_source(folder).errors == [], folder
+
+
 def test_variable_names_cannot_reach_internal_slots():
     with pytest.raises(DataFormatError):
         variable_index("conc_slot0")
-    assert variable_index("conc_paracetamol_mg_l") == OBS_INDEX["conc_slot3"]
+    assert variable_index("conc_paracetamol_mg_l") == OBS_INDEX[slot_name("paracetamol")]
 
 
 def test_splits_keep_whole_studies_together(tmp_path):
@@ -148,7 +207,7 @@ def test_a_small_group_never_repeats_a_subject_to_fill_a_batch(tmp_path):
 def test_scores_name_drugs_rather_than_internal_slots():
     from humanmock.training.train import _readable
 
-    assert _readable("conc_slot0") == "conc_amoxicillin_mg_l"
+    assert _readable(slot_name("amoxicillin")) == "conc_amoxicillin_mg_l"
     assert _readable("temperature_c") == "temperature_c"
 
 
@@ -268,4 +327,4 @@ def test_training_discovers_hidden_biology(tmp_path):
     p, _ = sim.create_particles({"age_years": 30, "weight_kg": 70}, [], book, 4, 1)
     later = sim.observe(sim.advance(p, book, 240.0, []), book)
     assert np.isfinite(later).all()
-    assert later[:, OBS_INDEX["conc_slot0"]].max() == 0.0
+    assert later[:, OBS_INDEX[slot_name("amoxicillin")]].max() == 0.0

@@ -29,71 +29,66 @@ import numpy as np
 
 from humanmock.knowledge import DRUG_FIELDS, KNOWLEDGE, MAX_DRUGS
 from humanmock.organs import ORGANS
-from humanmock.organs.base import AMOUNT, COUNT, FRACTION, LEVEL, sigmoid
+from humanmock.organs.base import AMOUNT, COUNT, FRACTION, KINDS, LEVEL, PER_DRUG, PER_PATHOGEN, sigmoid
 
-COVARIATES: tuple[str, ...] = (
-    "age_years",
-    "sex_female",
-    "weight_kg",
-    "height_cm",
-    "creatinine_mg_dl",
-    "alt_u_l",
-    "heart_rate_bpm",
-    "respiratory_rate_bpm",
-    "wbc_k_ul",
-    "crp_mg_l",
-    "body_temp_c",
-    "systolic_bp_mmhg",
-    "diastolic_bp_mmhg",
-    "immune_function",
-    "hepatic_function",
-)
+COVARIATES: tuple[str, ...] = tuple(KNOWLEDGE.patient)
 COV_INDEX = {n: i for i, n in enumerate(COVARIATES)}
-# Rough centre and spread used only to put inputs on a similar scale for the networks.
-COV_CENTER = np.array([45, 0.5, 75, 168, 0.9, 22, 72, 15, 7, 2, 36.7, 120, 72, 1, 1], dtype=np.float32)
-COV_SCALE = np.array([20, 0.5, 20, 12, 0.3, 15, 12, 3, 2.5, 5, 0.4, 18, 12, 0.3, 0.3], dtype=np.float32)
+COV_CENTER = np.array([KNOWLEDGE.patient[n]["center"] for n in COVARIATES], dtype=np.float32)
+COV_SCALE = np.array([KNOWLEDGE.patient[n]["scale"] for n in COVARIATES], dtype=np.float32)
 
 N_LATENT = 4
 LATENT_TAUS_H = np.array([6.0, 24.0, 168.0, 1440.0], dtype=np.float32)
 EMBED_SIZE = 8
 HIDDEN = 32
 
-# Observables computed after neural correction, as (source observable, threshold, softness).
-FRACTIONS: dict[str, tuple[str, float, float]] = {
-    "sore_throat_fraction": ("throat_pain_0_10", 2.0, 0.5),
-    "fever_fraction": ("temperature_c", 38.0, 0.15),
-    "culture_positive_fraction": ("throat_culture_log10_cfu", 2.0, 0.3),
-}
 
-# Largest correction the observation network may apply. Zero means measured directly from state.
-OBS_RESIDUAL_SCALE: dict[str, float] = {
-    "temperature_c": 0.5,
-    "heart_rate_bpm": 8.0,
-    "respiratory_rate_bpm": 3.0,
-    "throat_pain_0_10": 2.0,
-    "cough_0_10": 2.0,
-    "fatigue_0_10": 2.0,
-    "diarrhea_0_10": 2.0,
-    "crp_mg_l": 15.0,
-    "wbc_k_ul": 2.0,
-}
-# Starting measurement noise per observable, learned during training.
-OBS_SIGMA: dict[str, float] = {
-    "temperature_c": 0.3,
-    "heart_rate_bpm": 6.0,
-    "respiratory_rate_bpm": 2.0,
-    "throat_pain_0_10": 1.0,
-    "cough_0_10": 1.0,
-    "fatigue_0_10": 1.0,
-    "diarrhea_0_10": 1.0,
-    "crp_mg_l": 8.0,
-    "wbc_k_ul": 1.5,
-    "throat_culture_log10_cfu": 1.0,
-    "toxicity_index_0_1": 0.1,
-    "sore_throat_fraction": 0.1,
-    "fever_fraction": 0.1,
-    "culture_positive_fraction": 0.05,
-}
+class OrganError(ValueError):
+    """Raised when an organ's declaration does not fit the body."""
+
+
+def check_organs(organs) -> list[str]:
+    """Returns every mistake in the organ declarations, in plain language."""
+    problems: list[str] = []
+    names = [o.name for o in organs]
+    seen_states: set[str] = set()
+    seen_measurements: set[str] = set()
+
+    def unique(kind: str, name: str, seen: set[str]) -> None:
+        if name in seen:
+            problems.append(f"Two organs declare a {kind} named {name}.")
+        seen.add(name)
+
+    if len(names) != len(set(names)):
+        problems.append("Two organs have the same name.")
+    for organ in organs:
+        for neighbor in organ.neighbors:
+            if neighbor not in names:
+                problems.append(f"Organ {organ.name} lists unknown neighbor {neighbor}. Known organs are {names}.")
+        for st in organ.states:
+            unique("state", st.name, seen_states)
+            if st.kind not in KINDS:
+                problems.append(f"State {st.name} has unknown kind {st.kind}. Use one of {KINDS}.")
+            if st.per not in (None, PER_DRUG, PER_PATHOGEN):
+                problems.append(f"State {st.name} has unknown per {st.per}. Use PER_DRUG, PER_PATHOGEN, or leave it out.")
+            if st.init_from is not None and st.init_from not in COVARIATES:
+                problems.append(f"State {st.name} starts from unknown patient parameter {st.init_from}.")
+        if organ.measurements and organ.observables is None:
+            problems.append(f"Organ {organ.name} declares measurements but has no observables function.")
+        for measurement in organ.measurements:
+            unique("measurement", measurement.name, seen_measurements)
+        for share in organ.shares:
+            unique("measurement", share.name, seen_measurements)
+    every_measurement = {m.name for o in organs for m in o.measurements}
+    for organ in organs:
+        for share in organ.shares:
+            if share.measurement not in every_measurement:
+                problems.append(f"Share {share.name} reads unknown measurement {share.measurement}.")
+    return problems
+
+
+_problems = check_organs(ORGANS)
+if _problems:
+    raise OrganError("The organ declarations have problems:\n- " + "\n- ".join(_problems))
 
 
 class Layout:
@@ -112,9 +107,6 @@ class Layout:
             self.latent_offset[organ.name] = offset
             offset += N_LATENT
         self.size = offset
-        names = [e[0] for e in self.entries]
-        if len(names) != len(set(names)):
-            raise ValueError("Two organs declare a state with the same name.")
         self.by_name = {e[0]: e for e in self.entries}
         self.organ_entries = {o.name: [e for e in self.entries if e[4] == o.name] for o in ORGANS}
 
@@ -142,12 +134,14 @@ class Layout:
 
 LAYOUT = Layout()
 
-OBS_BASE: tuple[str, ...] = tuple(n for o in ORGANS for n in o.observable_names)
-OBS_NAMES: tuple[str, ...] = OBS_BASE + tuple(FRACTIONS.keys())
+MEASUREMENTS = tuple(m for o in ORGANS for m in o.measurements)
+SHARES = tuple(s for o in ORGANS for s in o.shares)
+OBS_BASE: tuple[str, ...] = tuple(m.name for m in MEASUREMENTS)
+OBS_NAMES: tuple[str, ...] = OBS_BASE + tuple(s.name for s in SHARES)
 OBS_INDEX = {n: i for i, n in enumerate(OBS_NAMES)}
-_RESIDUAL_SCALE = np.array([OBS_RESIDUAL_SCALE.get(n, 0.0) for n in OBS_BASE], dtype=np.float32)
-_OBS_SIGMA = np.array([OBS_SIGMA.get(n, 1.0) for n in OBS_NAMES], dtype=np.float32)
-_FRACTION_SPEC = [(OBS_INDEX[src], thr, soft) for (src, thr, soft) in FRACTIONS.values()]
+PUBLIC_OBSERVABLES: dict[str, str] = {m.name: m.unit for m in MEASUREMENTS if m.public}
+_RESIDUAL_SCALE = np.array([m.neural_range for m in MEASUREMENTS], dtype=np.float32)
+_OBS_SIGMA = np.array([m.noise for m in MEASUREMENTS] + [s.noise for s in SHARES], dtype=np.float32)
 
 _DRUG_FIELD_INDEX = {n: i for i, n in enumerate(DRUG_FIELDS)}
 _REGISTRY_MASK = np.array([i < len(KNOWLEDGE.drug_names) for i in range(MAX_DRUGS)], dtype=np.float32)
@@ -162,6 +156,24 @@ class Context(NamedTuple):
     patient: dict
     embed: jax.Array
     slot_trained: jax.Array
+
+
+class _Signals(dict):
+    """Values organs publish for each other, with a clear message for a wrong order."""
+
+    def __missing__(self, name):
+        raise KeyError(
+            f"No organ has published the signal '{name}' yet. An organ's signals can only read signals from "
+            f"organs above it in organs/__init__.py. Published so far: {sorted(self)}."
+        )
+
+
+def _publish_signals(s, c: Context) -> _Signals:
+    e = _Signals()
+    for organ in ORGANS:
+        if organ.signals is not None:
+            organ.signals(s, c, e)
+    return e
 
 
 def _state_features(x, st):
@@ -295,20 +307,15 @@ class BodyModel(eqx.Module):
     def initial_state(self, c: Context) -> jax.Array:
         y = jnp.zeros(LAYOUT.size)
         for name, off, size, st, _ in LAYOUT.entries:
-            y = y.at[off : off + size].set(st.init)
-        y = LAYOUT.set(y, "temperature", c.patient["body_temp_c"])
-        y = LAYOUT.set(y, "crp", c.patient["crp_mg_l"])
-        y = LAYOUT.set(y, "wbc", c.patient["wbc_k_ul"])
+            start = st.init if st.init_from is None else c.patient[st.init_from]
+            y = y.at[off : off + size].set(start)
         return y
 
     # ---- The differential equation ----
 
     def vector_field(self, t, y, c: Context) -> jax.Array:
         s = LAYOUT.unpack(y)
-        e: dict = {}
-        for organ in ORGANS:
-            if organ.signals is not None:
-                organ.signals(s, c, e)
+        e = _publish_signals(s, c)
         d: dict = {}
         for organ in ORGANS:
             d.update(organ.derivative(s, c, e))
@@ -327,7 +334,7 @@ class BodyModel(eqx.Module):
                 raw = out[cursor : cursor + st.size] if st.size > 1 else out[cursor]
                 cursor += st.size
                 correction = _gate(raw, s[st.name], st)
-                if organ.name == "pharmacology":
+                if st.per == PER_DRUG:
                     correction = correction * c.slot_trained  # No learning applies to hypothetical drugs.
                 d[st.name] = d[st.name] + correction
             tau = jnp.exp(jnp.clip(self.log_tau[i], jnp.log(1.0), jnp.log(8760.0)))
@@ -338,22 +345,21 @@ class BodyModel(eqx.Module):
 
     def observe(self, y, c: Context) -> jax.Array:
         s = LAYOUT.unpack(y)
-        e: dict = {}
-        for organ in ORGANS:
-            if organ.signals is not None:
-                organ.signals(s, c, e)
+        e = _publish_signals(s, c)
         parts = []
         for organ in ORGANS:
-            if organ.observables is not None:
-                parts.extend(jnp.atleast_1d(v) for v in organ.observables(s, c, e).values())
+            if organ.measurements:
+                # Read by name, so the order an organ returns its values in cannot mislabel them.
+                values = organ.observables(s, c, e)
+                parts.extend(jnp.atleast_1d(values[m.name]) for m in organ.measurements)
         base = jnp.concatenate(parts)
         features = jnp.concatenate(
             [jnp.atleast_1d(_state_features(s[n], st)) for n, _, _, st, _ in LAYOUT.entries]
             + [y[LAYOUT.physio_size :], c.embed]
         )
         base = base + jnp.asarray(_RESIDUAL_SCALE) * jnp.tanh(self.decoder(features))
-        fractions = [sigmoid((base[i] - thr) / soft) for i, thr, soft in _FRACTION_SPEC]
-        return jnp.concatenate([base, jnp.stack(fractions)])
+        shares = [sigmoid((base[OBS_INDEX[x.measurement]] - x.threshold) / x.softness) for x in SHARES]
+        return jnp.concatenate([base, jnp.stack(shares)]) if shares else base
 
     # ---- Changes that happen at an instant ----
 

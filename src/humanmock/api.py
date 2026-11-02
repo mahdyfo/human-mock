@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from humanmock import __version__
-from humanmock.engine import PUBLIC_OBSERVABLES, Simulator
+from humanmock.engine import Simulator
 from humanmock.knowledge import DRUG_FIELDS, KNOWLEDGE
-from humanmock.model import trainable_groups
+from humanmock.model import PUBLIC_OBSERVABLES, trainable_groups
 from humanmock.population import PatientError
 from humanmock.sessions import ModelMismatch, SessionManager, SessionNotFound, SessionStore, StepNotFound
 
@@ -26,25 +26,24 @@ class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class Patient(Strict):
-    """Every field is optional. Anything left out is sampled from similar people."""
+def _patient_fields() -> dict[str, Any]:
+    """Patient parameters come from physiology.yaml, so adding one there adds it here."""
+    fields: dict[str, Any] = {}
+    for name, entry in KNOWLEDGE.patient.items():
+        if name == "sex_female":
+            fields["sex"] = (Literal["male", "female"] | None, Field(None))
+        else:
+            fields[name] = (float | None, Field(None, description=entry["note"]))
+    fields["allergies"] = (list[str], Field(default_factory=list))
+    return fields
 
-    age_years: float | None = Field(None, ge=12, le=90)
-    sex: Literal["male", "female"] | None = None
-    weight_kg: float | None = None
-    height_cm: float | None = None
-    creatinine_mg_dl: float | None = None
-    alt_u_l: float | None = None
-    heart_rate_bpm: float | None = None
-    respiratory_rate_bpm: float | None = None
-    wbc_k_ul: float | None = None
-    crp_mg_l: float | None = None
-    body_temp_c: float | None = None
-    systolic_bp_mmhg: float | None = None
-    diastolic_bp_mmhg: float | None = None
-    immune_function: float | None = Field(None, description="1.0 is typical, lower means weaker immunity.")
-    hepatic_function: float | None = Field(None, description="1.0 is typical, lower means weaker liver clearance.")
-    allergies: list[str] = Field(default_factory=list)
+
+Patient = create_model(
+    "Patient",
+    __base__=Strict,
+    __doc__="Every field is optional. Anything left out is sampled from similar people.",
+    **_patient_fields(),
+)
 
 
 class Condition(Strict):
