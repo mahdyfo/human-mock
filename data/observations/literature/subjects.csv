@@ -1,0 +1,9 @@
+subject_id,study_id,kind,n,age_years,sex,weight_kg,height_cm,conditions,split,notes
+lit_amox_250,label_amoxicillin,arm,,,,,,,train,DailyMed amoxicillin label: 250 mg peak 3.5 to 5.0 mg/L at 1 to 2 h
+lit_amox_500,label_amoxicillin,arm,,,,,,,train,DailyMed amoxicillin label: 500 mg peak 5.5 to 7.5 mg/L at 1 to 2 h and half-life 61.3 min
+lit_amox_875,label_amoxicillin,arm,,,,,,,train,DailyMed amoxicillin label: 875 mg Cmax 13.8 +/- 4.1 mg/L; peak time assumed 1.5 h
+lit_penv_500,label_penicillin_v,arm,,,,,,,train,Reference summary: 500 mg peak 3 to 5 mg/L at 30 to 60 min
+lit_ibu_200,label_ibuprofen,arm,,,,,,,train,Ibuprofen label: 200 mg adult suspension Cmax 19 mg/L; peak within 1 to 2 h
+cochrane_placebo,cochrane_2021_sore_throat,arm,,,,,,strep_a:2,train,"Spinks 2021 Cochrane: 82% symptom-free by one week on placebo. Day 3 value derived from RR 0.70 and NNT under 6. Trials mix swab-positive and swab-negative people, while this arm assumes strep."
+cochrane_antibiotic,cochrane_2021_sore_throat,arm,,,,,,strep_a:2,train,"Spinks 2021 Cochrane: RR 0.70 at day 3 and 0.50 at one week applied to the placebo arm. Regimen assumed as penicillin V 500 mg every 8 h for 10 days."
+culture_penicillin,culture_review_2023,arm,,,,,,strep_a:2,val,"Time to negative throat culture review, PMC10103550: penicillins 6.5% still positive at day 1, 4.7% at day 2, 2.6% across days 3 to 9. Kept out of training to test prediction."
