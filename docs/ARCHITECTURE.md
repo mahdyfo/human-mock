@@ -69,6 +69,26 @@ Every response also says whether the request stays within what the model was tra
 on. An AI agent searching for treatments should treat results outside that support
 as unreliable, because an optimiser is naturally drawn to wherever a model is wrong.
 
+## Keeping gradients meaningful
+
+Training sends gradients backward through the solver, and this can fail without any
+visible sign in the results. The adaptive solver chooses its steps by the errors it
+sees. A fast state sitting at zero, such as a drug nobody has taken, shows no error, so
+the solver may step too far for it. Going forward nothing goes wrong. Going backward,
+that state's gradient grows on every step until it drowns every real signal or overflows.
+
+Three things prevent this, and none of them changes a forward result:
+
+- **The largest training step is 1 hour,** inside the stability limit of the fastest
+  states. At 2 hours, gradients reach hundreds of millions. At 1 hour they are about 5,
+  and they match the values at 30 minutes.
+- **Amounts too small for the solver to resolve pass no gradient,** because below its
+  tolerance the value is numerical noise.
+- **A cap keeps every gradient through the solver finite,** as a safety net.
+
+Training counts any step it has to skip, and a test in `tests/test_contract.py` fails
+for any organ that makes gradients explode.
+
 ## Time
 
 Doses and exposures are instant jumps applied at segment boundaries. Between them,

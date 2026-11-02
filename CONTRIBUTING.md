@@ -159,6 +159,10 @@ Choose these with care:
   stays extinct, and an `amount` cannot appear from nothing.
 - **`rate_scale`** is the largest correction per hour the neural cell may apply. Keep it
   small compared with how fast the state really changes.
+- **How fast a state changes** matters for training. With the solver's 1 hour steps, a
+  state that changes at 2 per hour is fine and one at 5 per hour makes gradients explode,
+  unless its `kind` is `amount`. A test in `tests/test_contract.py` tells you if this
+  happens.
 - **`neighbors`** are the organs the neural cell may see. Keep these to real
   physiological links, because they limit what the network can invent.
 - **`neural_range`** is the largest correction the network may make to a measurement.

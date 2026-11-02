@@ -119,8 +119,8 @@ def test_gradients_through_a_long_illness_stay_a_sensible_size(tmp_path):
     """Training only works if gradients stay meaningful, so this covers every organ.
 
     If this fails after adding an organ, one of its states probably changes faster than
-    the training solver can follow, at more than about 2.5 per hour. Slow that state
-    down, or lower dtmax in TRAIN_SOLVER, which makes training slower.
+    the training solver can follow. A rate of 2 per hour is fine, and 5 per hour is too
+    fast. Slow that state down, or lower dtmax in TRAIN_SOLVER, which makes training slower.
     """
     pd.DataFrame(
         [{"subject_id": "a", "study_id": "s", "age_years": 40, "weight_kg": 70, "conditions": f"{KNOWLEDGE.path_names[0]}:1"}]

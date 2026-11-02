@@ -11,8 +11,8 @@ everything between calls until you reset it.
 
 > **This is a research simulator, not a medical tool.** Do not use it to diagnose or
 > treat anyone. Most of its constants are still assumptions, and it covers only one
-> kind of illness so far. Each response says how well the request is supported by
-> training data.
+> kind of illness so far. Each response says whether the request is within what the
+> model was trained on.
 
 ## What exists today
 
@@ -27,6 +27,19 @@ everything between calls until you reset it.
   people in the NHANES health survey.
 - **Session memory.** Continue, reset, rewind, fork, and review. Sessions survive a
   server restart.
+
+## How far it has got
+
+- **The neural parts can learn.** Practice data comes from a body with hidden laws, such
+  as older people clearing paracetamol more slowly. No equation says this, and the
+  networks find it on people they never trained on. A test requires this on every
+  training change.
+- **It does not yet simulate a real body well.** It has 15 real training subjects and
+  one family of illness. Its predictions moved toward published trial results, but
+  got worse on one study it never saw. [docs/TRAINING.md](docs/TRAINING.md#what-to-expect)
+  has the numbers.
+
+Getting further needs more data and more organs, which is why contributions matter.
 
 ## Help build it
 
