@@ -440,11 +440,11 @@ function renderWaiting() {
     return;
   }
   const next = Math.min(...state.queue.map((q) => q.at));
-  const doses = state.queue.filter((q) => q.type === "dose");
-  const count = doses.length;
-  const summary = count
-    ? `${plural(count, "dose")} waiting. They take effect as time moves forward.`
-    : "An exposure is waiting. It takes effect as time moves forward.";
+  const doses = state.queue.filter((q) => q.type === "dose").length;
+  const exposures = state.queue.length - doses;
+  const what = [doses && plural(doses, "dose"), exposures && plural(exposures, "exposure")].filter(Boolean).join(" and ");
+  const verb = state.queue.length === 1 ? "It takes" : "They take";
+  const summary = `${capitalise(what)} waiting. ${verb} effect as time moves forward.`;
   const when = next <= now() + 1e-6 ? "The next one happens straight away." : `The next one is at ${elapsed(next)}.`;
   box.hidden = false;
   box.replaceChildren(
