@@ -209,12 +209,12 @@ humanmock train --out checkpoints/run1 --batch-size 4 --people 4
 Lower `--people` makes the shares of people in trial outcomes noisier, so avoid going
 below 4 when training on those outcomes.
 
-### A known crash
+### If your computer crashes
 
-Scripts that compiled many large gradient programs in one process sometimes stopped
-with an access violation inside JAX, on Windows with Python 3.14. The cause is unknown.
-It never happened during a training run or the test suite, and not in 52 short
-simulation runs. Training does not resume yet, so if it does happen, run it again.
+Training and the tests work the processor hard, which can expose faulty hardware. If you
+see random access violations or blue screens, look for WHEA-Logger entries in the Windows
+Event Viewer before suspecting the code. Errors that keep naming the same APIC ID point at
+the processor. Training does not resume yet, so run it again once the computer is stable.
 
 ## Testing against unseen evidence
 
