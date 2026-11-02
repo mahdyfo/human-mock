@@ -1,0 +1,195 @@
+# Every value here is the STARTING POINT for training, not a measured truth.
+# "source: assumption" means nobody has calibrated it yet. Replacing an
+# assumption with a cited value is one of the most useful contributions.
+# Units are hours, litres, milligrams. "iiv" is the between-person spread as a
+# log-normal standard deviation.
+
+# What can describe a person. Callers may give any of these, and anything missing
+# is sampled from similar people. Center and scale only put values on a similar
+# footing for the networks. Min and max reject impossible values. A parameter that
+# population_nhanes.json does not cover needs a prior, either [normal, mean, sd] or
+# [lognormal, log mean, log sd], and a source for that prior.
+patient:
+  age_years:            {center: 45,   scale: 20,  min: 12,   max: 90,  note: "Age in years"}
+  sex_female:           {center: 0.5,  scale: 0.5, note: "1 for female and 0 for male. Callers send sex as text."}
+  weight_kg:            {center: 75,   scale: 20,  min: 25,   max: 250, note: "Body weight"}
+  height_cm:            {center: 168,  scale: 12,  min: 120,  max: 220, note: "Height"}
+  creatinine_mg_dl:     {center: 0.9,  scale: 0.3, min: 0.2,  max: 12,  note: "Serum creatinine, used to estimate kidney function"}
+  alt_u_l:              {center: 22,   scale: 15,  min: 3,    max: 400, note: "Alanine aminotransferase, a liver blood test"}
+  heart_rate_bpm:       {center: 72,   scale: 12,  min: 40,   max: 130, note: "Resting heart rate"}
+  respiratory_rate_bpm: {center: 15,   scale: 3,   min: 8,    max: 30,  note: "Resting breathing rate", prior: [normal, 15.0, 2.0], source: assumption}
+  wbc_k_ul:             {center: 7,    scale: 2.5, min: 1.5,  max: 25,  note: "White cell count"}
+  crp_mg_l:             {center: 2,    scale: 5,   min: 0.05, max: 60,  note: "C-reactive protein"}
+  body_temp_c:          {center: 36.7, scale: 0.4, min: 35.5, max: 37.8, note: "Temperature when healthy", prior: [normal, 36.7, 0.25], source: assumption}
+  systolic_bp_mmhg:     {center: 120,  scale: 18,  min: 70,   max: 220, note: "Systolic blood pressure"}
+  diastolic_bp_mmhg:    {center: 72,   scale: 12,  min: 30,   max: 130, note: "Diastolic blood pressure"}
+  immune_function:      {center: 1,    scale: 0.3, min: 0.05, max: 2,   note: "1.0 is typical, lower means weaker immunity", prior: [lognormal, 0.0, 0.2], source: assumption}
+  hepatic_function:     {center: 1,    scale: 0.3, min: 0.05, max: 1.5, note: "1.0 is typical, lower means weaker liver clearance", prior: [lognormal, 0.0, 0.1], source: assumption}
+
+system:
+  k_innate_on:        {value: 0.15,    iiv: 0.25, source: assumption, note: "innate activation rate per hour"}
+  k_innate_off:       {value: 0.06,    iiv: 0.20, source: assumption, note: "innate decay, half-life about 12 h"}
+  k_effector_on:      {value: 0.006,   iiv: 0.35, source: assumption, note: "adaptive effector activation"}
+  k_effector_off:     {value: 0.003,   iiv: 0.20, source: assumption, note: "effector decay, half-life about 10 days"}
+  memory_boost:       {value: 6.0,     iiv: 0.30, source: assumption, note: "how much immune memory speeds re-activation"}
+  memory_direct_kill: {value: 0.3,     iiv: 0.30, source: assumption, note: "standing protection from memory"}
+  k_memory_on:        {value: 0.008,   iiv: 0.30, source: assumption, note: "memory formation while effectors are active"}
+  k_memory_off:       {value: 0.000079, iiv: 0.20, source: assumption, note: "memory decay, half-life about 1 year"}
+  k_cytokine:         {value: 0.3,     iiv: 0.15, source: assumption, note: "cytokine turnover, half-life about 2.3 h"}
+  tissue_to_cytokine: {value: 0.2,     iiv: 0.25, source: assumption, note: "damaged tissue keeps inflammation going"}
+  k_crp_prod:         {value: 3.0,     iiv: 0.35, source: assumption, note: "CRP production in mg/L per hour at full cytokine"}
+  k_crp_off:          {value: 0.0365,  iiv: 0.10, source: "CRP half-life about 19 h, textbook value not re-verified", note: "CRP clearance"}
+  k_wbc_prod:         {value: 0.25,    iiv: 0.30, source: assumption, note: "white cell rise"}
+  k_wbc_off:          {value: 0.05,    iiv: 0.20, source: assumption, note: "white cell return to baseline"}
+  k_heal:             {value: 0.022,   iiv: 0.30, source: assumption, note: "throat tissue healing"}
+  k_cough:            {value: 0.05,    iiv: 0.25, source: assumption, note: "cough drive turnover"}
+  k_fatigue:          {value: 0.04,    iiv: 0.25, source: assumption, note: "fatigue turnover"}
+  fever_max:          {value: 2.8,     iiv: 0.15, source: assumption, note: "largest pyrogenic rise in degrees C"}
+  fever_half:         {value: 0.4,     iiv: 0.20, source: assumption, note: "cytokine level giving half the fever"}
+  tau_temp:           {value: 1.0,     iiv: 0.15, source: assumption, note: "time for body temperature to follow its set point"}
+  hr_per_c:           {value: 9.0,     iiv: 0.15, source: "about 8 to 10 bpm per degree C, textbook value not re-verified", note: "heart rate rise with temperature"}
+  hr_per_cytokine:    {value: 6.0,     iiv: 0.25, source: assumption, note: "sympathetic heart rate rise"}
+  rr_per_c:           {value: 1.5,     iiv: 0.20, source: assumption, note: "breathing rate rise with temperature"}
+  rr_per_cytokine:    {value: 1.5,     iiv: 0.25, source: assumption, note: "breathing rate rise with inflammation"}
+  pain_tissue:        {value: 2.2,     iiv: 0.25, source: assumption, note: "throat pain from tissue damage"}
+  pain_cytokine:      {value: 0.4,     iiv: 0.25, source: assumption, note: "throat pain from inflammation"}
+  fatigue_gain:       {value: 2.0,     iiv: 0.25, source: assumption, note: "fatigue score gain"}
+  k_gut_recover:      {value: 0.008,   iiv: 0.30, source: assumption, note: "gut flora recovery, half-life about 3.6 days"}
+  k_tox_recover:      {value: 0.01,    iiv: 0.30, source: assumption, note: "organ stress recovery"}
+  tox_clearance_loss: {value: 0.7,     iiv: 0.20, source: assumption, note: "organ stress reduces drug clearance"}
+
+pathogens:
+  strep_a:
+    label: "Group A Streptococcus throat infection"
+    r:                  {value: 0.35,  iiv: 0.15, source: assumption, note: "net growth on the throat surface per hour"}
+    log10_capacity:     {value: 7.5,   iiv: 0.05, source: assumption, note: "surface carrying capacity, log10 CFU"}
+    innate_kill:        {value: 0.15,  iiv: 0.25, source: assumption, note: "kill rate at full innate activation"}
+    adaptive_kill:      {value: 0.75,  iiv: 0.25, source: assumption, note: "kill rate at full effector activation"}
+    surface_half:       {value: 4.5,   iiv: 0.03, source: assumption, note: "log10 load causing half the local reaction"}
+    antigen_half:       {value: 3.0,   iiv: 0.05, source: assumption, note: "log10 load causing half the adaptive response"}
+    pyrogen:            {value: 1.0,   iiv: 0.20, source: assumption, note: "inflammatory potency"}
+    damage_rate:        {value: 0.05,  iiv: 0.25, source: assumption, note: "tissue damage per hour at saturation"}
+    cough_potency:      {value: 0.15,  iiv: 0.40, source: "cough is uncommon in strep throat, clinical teaching", note: "cough drive"}
+    k_to_reservoir:     {value: 0.02,  iiv: 0.30, source: assumption, note: "surface to protected reservoir"}
+    k_from_reservoir:   {value: 0.005, iiv: 0.40, source: assumption, note: "reservoir back to surface"}
+    reservoir_r:        {value: 0.04,  iiv: 0.20, source: assumption, note: "growth inside the protected reservoir"}
+    reservoir_kill:     {value: 0.08,  iiv: 0.30, source: assumption, note: "effector killing inside the reservoir"}
+    log10_reservoir_capacity: {value: 4.3, iiv: 0.08, source: "intracellular persistence is described in penicillin failure reviews, size is an assumption", note: "reservoir capacity"}
+    antibiotic_susceptibility: {value: 1.0, iiv: 0.10, source: "S. pyogenes stays beta-lactam susceptible per reviews", note: "scales antibacterial drug effect"}
+    incubation_h:       {value: 40.0,  iiv: 0.20, source: assumption, note: "exposure to first symptoms"}
+    log10_inoculum:     {value: 2.0,   iiv: 0.10, source: assumption, note: "starting load"}
+  viral_pharyngitis:
+    label: "Generic viral sore throat"
+    r:                  {value: 0.5,   iiv: 0.15, source: assumption, note: "replication per hour"}
+    log10_capacity:     {value: 7.5,   iiv: 0.05, source: assumption, note: "carrying capacity, log10 copies"}
+    innate_kill:        {value: 0.15,  iiv: 0.25, source: assumption, note: "kill rate at full innate activation"}
+    adaptive_kill:      {value: 1.2,   iiv: 0.25, source: assumption, note: "kill rate at full effector activation"}
+    surface_half:       {value: 4.5,   iiv: 0.03, source: assumption, note: "log10 load causing half the local reaction"}
+    antigen_half:       {value: 3.0,   iiv: 0.05, source: assumption, note: "log10 load causing half the adaptive response"}
+    pyrogen:            {value: 0.7,   iiv: 0.20, source: assumption, note: "inflammatory potency"}
+    damage_rate:        {value: 0.03,  iiv: 0.25, source: assumption, note: "tissue damage per hour at saturation"}
+    cough_potency:      {value: 0.9,   iiv: 0.30, source: assumption, note: "cough drive"}
+    k_to_reservoir:     {value: 0.0,   iiv: 0.0,  source: assumption, note: "no reservoir"}
+    k_from_reservoir:   {value: 0.0,   iiv: 0.0,  source: assumption, note: "no reservoir"}
+    reservoir_r:        {value: 0.0,   iiv: 0.0,  source: assumption, note: "no reservoir"}
+    reservoir_kill:     {value: 0.0,   iiv: 0.0,  source: assumption, note: "no reservoir"}
+    log10_reservoir_capacity: {value: 1.0, iiv: 0.0, source: assumption, note: "no reservoir"}
+    antibiotic_susceptibility: {value: 0.0, iiv: 0.0, source: "antibacterial drugs do not act on viruses", note: "scales antibacterial drug effect"}
+    incubation_h:       {value: 30.0,  iiv: 0.20, source: assumption, note: "exposure to first symptoms"}
+    log10_inoculum:     {value: 2.0,   iiv: 0.10, source: assumption, note: "starting load"}
+
+# Drug fields map one to one to DRUG_FIELDS in humanmock/knowledge.py, so a
+# hypothetical drug can be described by mechanism instead of by name.
+# Oral values fitted with bioavailability 1.0 are apparent values, so IV use of
+# those drugs is not valid.
+drugs:
+  amoxicillin:
+    label: "Amoxicillin"
+    ka: 1.2
+    bioavailability: 1.0
+    v_l_per_kg: 0.52
+    cl_ref_l_h: 24.7
+    frac_renal: 0.6
+    frac_unbound: 0.8
+    kill_emax: 1.6
+    kill_ec50: 0.016
+    kill_hill: 2.0
+    reservoir_penetration: 0.02
+    gut_rate: 0.002
+    gut_ec50: 1.0
+    tox_rate: 0.02
+    tox_ec50: 300.0
+    max_single_dose_mg: 1000
+    max_daily_dose_mg: 3000
+    sources:
+      pk: "DailyMed amoxicillin label: half-life 61.3 min, 875 mg Cmax 13.8 and AUC 35.4, so apparent CL/F 24.7 L/h and V/F 36.4 L"
+      binding: "DailyMed amoxicillin label: about 20% protein bound"
+      renal: "DailyMed amoxicillin label: about 60% in urine within 6 to 8 h"
+      kill_ec50: "EUCAST S. pyogenes panel includes 0.016 mg/L for benzylpenicillin, amoxicillin value is an assumption"
+      kill_emax: assumption
+      reservoir_penetration: "poor epithelial penetration is described in reviews, the number is an assumption"
+      dose_limits: "warning thresholds only, not clinical guidance"
+  penicillin_v:
+    label: "Penicillin V"
+    ka: 2.5
+    bioavailability: 0.6
+    v_l_per_kg: 0.57
+    cl_ref_l_h: 41.0
+    frac_renal: 0.4
+    frac_unbound: 0.23
+    kill_emax: 1.6
+    kill_ec50: 0.016
+    kill_hill: 2.0
+    reservoir_penetration: 0.02
+    gut_rate: 0.0015
+    gut_ec50: 1.0
+    tox_rate: 0.02
+    tox_ec50: 300.0
+    max_single_dose_mg: 1000
+    max_daily_dose_mg: 4000
+    sources:
+      pk: "500 mg oral peak 3 to 5 mg/L at 30 to 60 min, serum half-life 41 min, bioavailability about 60%"
+      binding: "unbound fraction 23% in a healthy adult study"
+      kill_emax: assumption
+      dose_limits: "warning thresholds only, not clinical guidance"
+  ibuprofen:
+    label: "Ibuprofen"
+    ka: 2.5
+    bioavailability: 1.0
+    v_l_per_kg: 0.12
+    cl_ref_l_h: 2.6
+    frac_renal: 0.01
+    frac_unbound: 0.01
+    antipyretic_emax: 0.85
+    antipyretic_ec50: 8.0
+    analgesic_emax: 0.7
+    analgesic_ec50: 8.0
+    tox_rate: 0.03
+    tox_ec50: 250.0
+    max_single_dose_mg: 800
+    max_daily_dose_mg: 3200
+    sources:
+      pk: "Ibuprofen label: half-life about 2 h, CL/F about 2.6 L/h, volume about 0.12 L/kg"
+      effects: assumption
+      dose_limits: "warning thresholds only, not clinical guidance"
+  paracetamol:
+    label: "Paracetamol (acetaminophen)"
+    ka: 2.5
+    bioavailability: 0.745
+    v_l_per_kg: 0.9
+    cl_ref_l_h: 21.0
+    frac_renal: 0.05
+    frac_unbound: 0.8
+    antipyretic_emax: 0.75
+    antipyretic_ec50: 5.0
+    analgesic_emax: 0.6
+    analgesic_ec50: 5.0
+    tox_rate: 0.3
+    tox_ec50: 150.0
+    max_single_dose_mg: 1000
+    max_daily_dose_mg: 4000
+    sources:
+      pk: "Review: volume about 0.9 L/kg, half-life 1.9 to 2.5 h, clearance 4.5 to 5.5 mL/kg/min. Pooled adult study: 74.5% absorbed"
+      effects: assumption
+      tox_ec50: assumption
+      dose_limits: "warning thresholds only, not clinical guidance"

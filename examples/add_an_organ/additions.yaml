@@ -1,0 +1,23 @@
+# What the example needs in src/humanmock/knowledge_data/physiology.yaml.
+# Each section below goes under the section of the same name in that file.
+# These numbers only demonstrate the format and are not evidence of anything.
+
+patient:
+  urine_output_l_day: {center: 1.5, scale: 0.5, min: 0.1, max: 5, note: "Daily urine output", prior: [lognormal, 0.4, 0.3], source: assumption}
+
+system:
+  k_kidney_recover:      {value: 0.01, iiv: 0.30, source: assumption, note: "Recovery of kidney injury per hour"}
+  creatinine_per_injury: {value: 3.0,  iiv: 0.20, source: assumption, note: "Creatinine rise at full injury"}
+
+drugs:
+  example_drug:
+    label: "Example drug"
+    ka: 1.0
+    v_l_per_kg: 0.5
+    cl_ref_l_h: 10.0
+    frac_renal: 0.5
+    tox_rate: 0.5
+    tox_ec50: 20.0
+    sources:
+      pk: assumption
+      tox_ec50: assumption

@@ -1,0 +1,14 @@
+subject_id,time_h,variable,value,sd
+lit_amox_250,1.5,conc_amoxicillin_mg_l,4.25,0.75
+lit_amox_500,1.5,conc_amoxicillin_mg_l,6.5,1.0
+lit_amox_500,5.5,conc_amoxicillin_mg_l,0.43,0.2
+lit_amox_875,1.5,conc_amoxicillin_mg_l,13.8,4.1
+lit_penv_500,0.75,conc_penicillin_v_mg_l,4.0,1.0
+lit_ibu_200,1.5,conc_ibuprofen_mg_l,19.0,4.0
+cochrane_placebo,72,sore_throat_fraction,0.57,0.08
+cochrane_placebo,168,sore_throat_fraction,0.18,0.05
+cochrane_antibiotic,72,sore_throat_fraction,0.40,0.08
+cochrane_antibiotic,168,sore_throat_fraction,0.09,0.04
+culture_penicillin,24,culture_positive_fraction,0.065,0.04
+culture_penicillin,48,culture_positive_fraction,0.047,0.03
+culture_penicillin,144,culture_positive_fraction,0.026,0.01
