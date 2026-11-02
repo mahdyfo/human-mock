@@ -107,6 +107,7 @@ the differential equation is solved with an adaptive method. This makes advancin
 | `src/humanmock/engine.py` | Runs virtual people through time |
 | `src/humanmock/sessions.py` | Session memory |
 | `src/humanmock/api.py` | The HTTP API |
+| `src/humanmock/ui/` | The web page, in plain HTML, CSS, and JavaScript |
 | `src/humanmock/data/` | Downloads and converters |
 | `src/humanmock/training/train.py` | The training loop |
 | `scripts/behaviour_report.py` | Standard scenarios against known targets |
@@ -120,9 +121,9 @@ can grow without changing the rest of the code.
 
 | Declared in | Reaches |
 |---|---|
-| `StateDef` in an organ | The solver, a neural cell, the physics gates, and `include_internal` |
-| `Measurement` in an organ | The observation network, data files, training, and API responses |
-| `Share` in an organ | Trial outcomes in data files, and `share_of_people` in responses |
+| `StateDef` in an organ | The solver, a neural cell, the physics gates, `include_internal`, and the page |
+| `Measurement` in an organ | The observation network, data files, training, API responses, charts, and the body diagram |
+| `Share` in an organ | Trial outcomes in data files, `share_of_people` in responses, and chart thresholds |
 | `patient:` in the YAML | The API, data files, missing value sampling, and the patient encoder |
 | `drugs:` in the YAML | The API, data files, and the number of drug slots |
 | `pathogens:` in the YAML | The API, data files, and every per-pathogen state |

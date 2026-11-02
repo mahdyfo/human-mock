@@ -70,6 +70,12 @@ CHECK = textwrap.dedent(
     assert catalog["observables"]["creatinine_rise_mg_dl"] == "mg per decilitre"
     assert "example_drug" in catalog["drugs"]
     assert "urine_output_l_day" in catalog["patient_parameters"]
+    # The web page draws from this, so the new organ reaches the chart and the body diagram.
+    kidney = next(o for o in catalog["organs"] if o["name"] == "kidney")
+    assert kidney["measurements"][0]["label"] == "Creatinine rise"
+    assert kidney["measurements"][0]["body_part"] == "kidneys"
+    assert kidney["states"][0]["name"] == "kidney_injury"
+    assert client.get("/").status_code == 200
 
     created = client.post(
         "/v1/sessions",

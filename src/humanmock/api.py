@@ -11,14 +11,18 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from humanmock import __version__
 from humanmock.engine import Simulator
 from humanmock.knowledge import DRUG_FIELDS, KNOWLEDGE
-from humanmock.model import PUBLIC_OBSERVABLES, trainable_groups
+from humanmock.model import PUBLIC_OBSERVABLES, describe_body, trainable_groups
 from humanmock.population import PatientError
 from humanmock.sessions import ModelMismatch, SessionManager, SessionNotFound, SessionStore, StepNotFound
+
+
+UI_FOLDER = Path(__file__).parent / "ui"
 
 
 class Strict(BaseModel):
@@ -175,7 +179,9 @@ def create_app(simulator: Simulator | None = None, database: str | Path | None =
             "conditions": conditions,
             "observables": PUBLIC_OBSERVABLES,
             "patient_parameters": [f for f in Patient.model_fields if f != "allergies"],
+            "patient": {name: entry for name, entry in KNOWLEDGE.patient.items() if name != "sex_female"},
             "custom_drug_parameters": list(DRUG_FIELDS),
+            "organs": describe_body(),
         }
 
     @app.get("/v1/model")
@@ -228,4 +234,6 @@ def create_app(simulator: Simulator | None = None, database: str | Path | None =
     def delete_session(session_id: str):
         guarded(manager.store.delete, session_id)
 
+    # The web page comes last, so it never hides an API route.
+    app.mount("/", StaticFiles(directory=UI_FOLDER, html=True), name="ui")
     return app

@@ -27,6 +27,7 @@ everything between calls until you reset it.
   people in the NHANES health survey.
 - **Session memory.** Continue, reset, rewind, fork, and review. Sessions survive a
   server restart.
+- **A web page.** A body diagram and charts that update as time moves forward.
 
 ## How far it has got
 
@@ -38,6 +39,8 @@ everything between calls until you reset it.
   one family of illness. Its predictions moved toward published trial results, but
   got worse on one study it never saw. [docs/TRAINING.md](docs/TRAINING.md#what-to-expect)
   has the numbers.
+- **Nobody can die in it.** It has no severe poisoning or death, so even a dangerous
+  overdose ends in recovery. Never read a result as proof that something is safe.
 
 Getting further needs more data and more organs, which is why contributions matter.
 
@@ -73,9 +76,17 @@ pytest -m "not slow"
 humanmock serve
 ```
 
-Interactive API documentation is then at http://127.0.0.1:8000/docs.
+Then open http://127.0.0.1:8000. Press "Try an example", give a medicine, and move time
+forward. "More options" in each section holds everything else, such as other
+measurements, seeds, and inventing a drug. Click anywhere on the chart to look at that
+moment, go back to it, or try something else from it and compare the two paths.
 
-## Use it
+Every illness, drug, measurement, and patient parameter on the page comes from the
+body's own declarations, so anything added to the body appears there by itself.
+
+## Use the API
+
+Interactive documentation is at http://127.0.0.1:8000/docs.
 
 Create a session. Every patient field is optional.
 

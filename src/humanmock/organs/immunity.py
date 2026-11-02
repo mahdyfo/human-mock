@@ -24,9 +24,9 @@ ORGAN = Organ(
     name="immunity",
     description="Innate response, pathogen-specific effectors, and pathogen-specific memory.",
     states=(
-        StateDef("innate", FRACTION, rate_scale=0.05),
-        StateDef("effector", FRACTION, rate_scale=0.02, per=PER_PATHOGEN),
-        StateDef("memory", FRACTION, rate_scale=0.002, per=PER_PATHOGEN),
+        StateDef("innate", FRACTION, rate_scale=0.05, label="Fast immune response"),
+        StateDef("effector", FRACTION, rate_scale=0.02, per=PER_PATHOGEN, label="Targeted immune response"),
+        StateDef("memory", FRACTION, rate_scale=0.002, per=PER_PATHOGEN, label="Immune memory"),
     ),
     neighbors=("pathogen", "inflammation"),
     derivative=derivative,

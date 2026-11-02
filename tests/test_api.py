@@ -210,6 +210,82 @@ def test_catalog_and_model_describe_the_service(client):
     assert model["status"] == "prior_only" and model["trainable_parameters"]["organ_cells"] > 0
 
 
+def test_the_web_page_is_served_without_hiding_the_api(client):
+    page = client.get("/")
+    assert page.status_code == 200 and "humanmock" in page.text
+    for name in ("app.js", "body.js", "chart.js", "api.js", "style.css", "fonts/atkinson-hyperlegible-next.woff2"):
+        assert client.get(f"/{name}").status_code == 200, name
+    assert client.get("/healthz").json()["status"] == "ok"
+    assert client.get("/docs").status_code == 200
+
+
+def test_the_page_only_loads_files_that_exist_locally(client):
+    """The page must work offline, so it never fetches scripts or styles from elsewhere."""
+    page = client.get("/").text
+    assert "<script" in page and 'src="http' not in page and 'href="http' not in page.split("<body>")[0]
+    style = client.get("/style.css").text
+    assert "http" not in style
+
+
+def test_the_catalog_describes_the_body_so_a_page_can_draw_it(client):
+    catalog = client.get("/v1/catalog").json()
+    organs = {o["name"]: o for o in catalog["organs"]}
+    pain = next(m for m in organs["throat"]["measurements"] if m["name"] == "throat_pain_0_10")
+    assert pain["label"] == "Throat pain" and pain["body_part"] == "throat" and pain["severe"] > pain["healthy"]
+    assert not any(m["name"].startswith("conc_slot") for o in catalog["organs"] for m in o["measurements"])
+    assert any(s["key"] == "fever" and s["measurement"] == "temperature_c" for s in organs["thermoregulation"]["shares"])
+    assert "cytokine" in [s["name"] for s in organs["inflammation"]["states"]]
+    assert catalog["patient"]["weight_kg"]["note"]
+
+
+def test_the_session_list_says_who_each_session_is_about(client):
+    sid = client.post("/v1/sessions", json=STREP_SESSION).json()["session_id"]
+    client.post(f"/v1/sessions/{sid}/step", json={"duration": "8h"})
+    fork = client.post(f"/v1/sessions/{sid}/fork").json()["session_id"]
+    listed = {s["session_id"]: s for s in client.get("/v1/sessions").json()["sessions"]}
+    assert listed[sid]["patient"]["age_years"] == 30 and listed[sid]["time_hours"] == 8
+    assert listed[sid]["conditions"][0]["name"] == "strep_a" and listed[sid]["forked_from"] is None
+    assert listed[fork]["forked_from"] == {"session_id": sid, "step": 1}
+    assert client.get(f"/v1/sessions/{fork}").json()["forked_from"]["session_id"] == sid
+
+
+def test_an_overdose_never_looks_like_proof_of_safety(client):
+    """This simulator has no severe poisoning or death, so recovering must not read as safe."""
+    sid = client.post("/v1/sessions", json=STREP_SESSION).json()["session_id"]
+    normal = client.post(
+        f"/v1/sessions/{sid}/step", json={"duration": "1h", "events": [{"drug": "paracetamol", "dose_mg": 500}]}
+    ).json()
+    assert normal["warnings"] == []
+    overdose = client.post(
+        f"/v1/sessions/{sid}/step", json={"duration": "1d", "events": [{"drug": "paracetamol", "dose_mg": 15000}]}
+    ).json()
+    text = " ".join(overdose["warnings"])
+    assert "cannot show severe poisoning or death" in text and "poison centre" in text
+
+
+def test_one_dose_of_several_kilograms_is_refused(client):
+    sid = client.post("/v1/sessions", json=STREP_SESSION).json()["session_id"]
+    too_much = client.post(
+        f"/v1/sessions/{sid}/step", json={"duration": "1h", "events": [{"drug": "amoxicillin", "dose_mg": 5000000}]}
+    )
+    assert too_much.status_code == 422
+
+
+def test_a_session_from_another_model_explains_how_to_continue(shared_sim, tmp_path):
+    from humanmock.engine import Simulator as Sim
+
+    database = tmp_path / "sessions.db"
+    sid = TestClient(create_app(shared_sim, database)).post("/v1/sessions", json=STREP_SESSION).json()["session_id"]
+    retrained = Sim(members=shared_sim.members, meta={"status": "trained", "model_id": "another", "support": {}})
+    client = TestClient(create_app(retrained, database))
+    refused = client.get(f"/v1/sessions/{sid}")
+    assert refused.status_code == 409 and "new_people" in refused.json()["detail"]
+    # What the page needs in order to offer the way out.
+    assert client.get(f"/v1/sessions/{sid}/history").status_code == 200
+    assert client.post(f"/v1/sessions/{sid}/reset", json={"new_people": True}).status_code == 200
+    assert client.get(f"/v1/sessions/{sid}").status_code == 200
+
+
 def test_delete_removes_the_session(client):
     sid = client.post("/v1/sessions", json=STREP_SESSION).json()["session_id"]
     assert client.delete(f"/v1/sessions/{sid}").status_code == 204

@@ -39,6 +39,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "humanmock.knowledge_data" = ["*.yaml", "*.json"]
+"humanmock" = ["ui/*", "ui/fonts/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

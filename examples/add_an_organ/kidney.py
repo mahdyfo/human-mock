@@ -27,6 +27,6 @@ ORGAN = Organ(
     neighbors=("pharmacology", "systemic"),
     derivative=derivative,
     observables=observables,
-    measurements=(Measurement("creatinine_rise_mg_dl", "mg per decilitre", noise=0.2, neural_range=0.1),),
+    measurements=(Measurement("creatinine_rise_mg_dl", "mg per decilitre", noise=0.2, neural_range=0.1, label="Creatinine rise", body_part="kidneys", severe=2.0),),
     shares=(Share("kidney_injury_fraction", "creatinine_rise_mg_dl", 0.3, 0.05),),
 )

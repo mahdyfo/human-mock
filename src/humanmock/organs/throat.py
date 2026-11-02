@@ -30,15 +30,15 @@ ORGAN = Organ(
     name="throat",
     description="Tissue damage with slow healing, which is why pain outlasts the pathogen.",
     states=(
-        StateDef("tissue", FRACTION, rate_scale=0.03),
-        StateDef("cough", LEVEL, rate_scale=0.05),
+        StateDef("tissue", FRACTION, rate_scale=0.03, label="Throat tissue damage"),
+        StateDef("cough", LEVEL, rate_scale=0.05, internal=False),
     ),
     neighbors=("pathogen", "inflammation"),
     derivative=derivative,
     observables=observables,
     measurements=(
-        Measurement("throat_pain_0_10", "score 0 to 10", noise=1.0, neural_range=2.0),
-        Measurement("cough_0_10", "score 0 to 10", noise=1.0, neural_range=2.0),
+        Measurement("throat_pain_0_10", "score 0 to 10", noise=1.0, neural_range=2.0, label="Throat pain", body_part="throat", severe=8.0),
+        Measurement("cough_0_10", "score 0 to 10", noise=1.0, neural_range=2.0, label="Cough", body_part="lungs", severe=8.0),
     ),
-    shares=(Share("sore_throat_fraction", "throat_pain_0_10", 2.0, 0.5, noise=0.1),),
+    shares=(Share("sore_throat_fraction", "throat_pain_0_10", 2.0, 0.5, noise=0.1, label="Sore throat"),),
 )

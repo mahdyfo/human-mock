@@ -43,8 +43,8 @@ ORGAN = Organ(
     name="pharmacology",
     description="One-compartment oral drug kinetics per drug slot, with renal and hepatic clearance.",
     states=(
-        StateDef("gut", AMOUNT, rate_scale=0.5, per=PER_DRUG, scale=500.0),
-        StateDef("conc", AMOUNT, rate_scale=0.5, per=PER_DRUG, scale=5.0),
+        StateDef("gut", AMOUNT, rate_scale=0.5, per=PER_DRUG, scale=500.0, label="Drug still in the gut", internal=False),
+        StateDef("conc", AMOUNT, rate_scale=0.5, per=PER_DRUG, scale=5.0, label="Drug in the blood", internal=False),
     ),
     neighbors=("systemic",),
     derivative=derivative,

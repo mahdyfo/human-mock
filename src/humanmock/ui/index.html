@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>humanmock</title>
+  <meta name="description" content="An open research simulator of the human body.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23e6f0ea'/%3E%3Cpath d='M3 20h6l3-11 5 16 3-9h9' fill='none' stroke='%231f3fb0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="band">
+    <h1 class="wordmark"><a href="./">humanmock</a></h1>
+    <p id="person-line" class="person-line">Research simulator of the human body</p>
+    <p id="model-line" class="model-line"></p>
+  </header>
+
+  <div class="layout">
+    <aside class="rail" aria-label="Controls">
+
+      <!-- Shown before a session starts. Every field is optional. -->
+      <form id="setup" class="section" autocomplete="off">
+        <h2>Who is this about?</h2>
+        <p class="hint">Leave anything blank. It gets filled in from similar people in a national health survey.</p>
+
+        <label class="field">Illness
+          <select id="setup-illness"></select>
+        </label>
+        <div class="field-row">
+          <label class="field">Age
+            <input id="setup-age" type="number" inputmode="decimal" min="12" max="90" placeholder="Not sure">
+          </label>
+          <label class="field">Sex
+            <select id="setup-sex">
+              <option value="">Not sure</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+            </select>
+          </label>
+          <label class="field">Weight, kg
+            <input id="setup-weight" type="number" inputmode="decimal" min="25" max="250" placeholder="Not sure">
+          </label>
+        </div>
+
+        <button class="primary wide" type="submit" id="setup-start">Start</button>
+        <p id="setup-error" class="error" role="alert" hidden></p>
+
+        <details class="more">
+          <summary>More options</summary>
+          <label class="field">Days since symptoms began
+            <input id="setup-onset" type="number" inputmode="decimal" min="0" max="30" step="0.5" value="1">
+          </label>
+          <fieldset id="setup-also" class="plain">
+            <legend>Also has</legend>
+          </fieldset>
+          <label class="field">Allergies, separated by commas
+            <input id="setup-allergies" type="text" placeholder="None known">
+          </label>
+          <div class="field-row">
+            <label class="field">Virtual people
+              <input id="setup-people" type="number" inputmode="numeric" min="1" max="512" value="64">
+            </label>
+            <label class="field">Seed
+              <input id="setup-seed" type="number" inputmode="numeric" placeholder="Random">
+            </label>
+          </div>
+          <p class="hint">A description never pins down one body, so the simulator runs many people who all fit it. More people give a smoother spread and run slower. The same seed gives the same people.</p>
+          <details class="more nested">
+            <summary>Other measurements</summary>
+            <div id="setup-measures"></div>
+          </details>
+          <details class="more nested">
+            <summary>Invent a drug</summary>
+            <div id="setup-drug">
+              <p class="hint">Describe a hypothetical drug by what it does. Its results only restate these numbers, and are never evidence that such a drug would work.</p>
+              <label class="field">Name
+                <input id="drug-name" type="text" maxlength="40" placeholder="Leave blank for none">
+              </label>
+            </div>
+          </details>
+        </details>
+      </form>
+
+      <!-- Shown during a session. -->
+      <div id="controls" hidden>
+        <form id="give" class="section" autocomplete="off">
+          <h2>Give medicine</h2>
+          <label class="field">Medicine
+            <select id="give-drug"></select>
+          </label>
+          <div class="field-row">
+            <label class="field">Dose, mg
+              <input id="give-dose" type="number" inputmode="decimal" min="0.1" step="any" required>
+            </label>
+            <label class="field">How often
+              <select id="give-every">
+                <option value="0">Just once</option>
+                <option value="4">Every 4 hours</option>
+                <option value="6">Every 6 hours</option>
+                <option value="8">Every 8 hours</option>
+                <option value="12">Every 12 hours</option>
+                <option value="24">Every day</option>
+              </select>
+            </label>
+          </div>
+          <label class="field" id="give-count-field" hidden>Number of doses
+            <input id="give-count" type="number" inputmode="numeric" min="2" max="500" value="9">
+          </label>
+          <button class="wide" type="submit" id="give-button">Give dose</button>
+          <div id="waiting" class="waiting" hidden></div>
+
+          <details class="more">
+            <summary>More options</summary>
+            <label class="field">How it is given
+              <select id="give-route">
+                <option value="oral">By mouth</option>
+                <option value="iv">Into a vein</option>
+              </select>
+            </label>
+            <label class="field">Expose to an illness
+              <select id="expose-illness"></select>
+            </label>
+            <button class="wide" type="button" id="expose-button">Expose now</button>
+          </details>
+        </form>
+
+        <section class="section">
+          <h2>Move time forward</h2>
+          <div class="time-buttons" id="time-buttons">
+            <button type="button" data-hours="1">1 hour</button>
+            <button type="button" data-hours="8">8 hours</button>
+            <button type="button" data-hours="24">1 day</button>
+            <button type="button" data-hours="72">3 days</button>
+            <button type="button" data-hours="168">1 week</button>
+          </div>
+          <button class="wide stop" type="button" id="stop-button" hidden>Stop</button>
+          <details class="more">
+            <summary>More options</summary>
+            <form id="custom-time" class="field-row inline" autocomplete="off">
+              <label class="field">Hours
+                <input id="custom-hours" type="number" inputmode="decimal" min="0.01" max="2160" step="any" required>
+              </label>
+              <button type="submit">Move</button>
+            </form>
+          </details>
+        </section>
+
+        <section class="section">
+          <h2>This person</h2>
+          <div class="pair">
+            <button type="button" id="restart-button">Back to the start</button>
+            <button type="button" id="new-person-button">New person</button>
+          </div>
+          <details class="more">
+            <summary>More options</summary>
+            <button class="wide" type="button" id="redraw-button">Draw new virtual people</button>
+            <p class="hint">This keeps the description, picks new people who fit it, and forgets everything so far.</p>
+            <div id="filled-in"></div>
+          </details>
+        </section>
+      </div>
+
+      <section class="section" id="saved-section" hidden>
+        <details class="more" id="saved-details">
+          <summary>Saved sessions</summary>
+          <ul id="saved-list" class="saved"></ul>
+        </details>
+      </section>
+
+      <p class="small-print">
+        A research simulator, not a medical tool. Never use it to decide anyone's treatment.
+        <a href="docs" target="_blank" rel="noopener">API</a>,
+        <a href="https://github.com/mahdyfo/human-mock" target="_blank" rel="noopener">source and contributing</a>.
+      </p>
+    </aside>
+
+    <main class="sheet">
+      <div id="welcome" class="welcome">
+        <div>
+          <h2>Watch a body respond over time</h2>
+          <p>Describe someone, give them medicine, and move time forward. You see their organs, germs, and drug levels change, and every measurement is charted as it happens.</p>
+          <button class="primary" type="button" id="example-button">Try an example</button>
+        </div>
+        <svg id="welcome-body" class="welcome-body" viewBox="0 0 200 420" aria-hidden="true"></svg>
+      </div>
+
+      <div id="chart" hidden>
+        <div class="sheet-head">
+          <p id="clock" class="clock" aria-live="off"></p>
+          <div id="compare-row" class="compare-row" hidden>
+            <label for="compare-select">Compare with</label>
+            <select id="compare-select"></select>
+          </div>
+        </div>
+
+        <div id="notices" class="notices" role="status"></div>
+
+        <div class="chart-layout">
+        <figure id="body-panel" class="body-panel">
+          <svg id="body-svg" class="body-svg" viewBox="0 0 200 420" role="img"></svg>
+          <figcaption>
+            <p id="body-status" class="body-status"></p>
+            <ul id="body-list" class="body-list"></ul>
+          </figcaption>
+        </figure>
+        <div class="chart-main">
+        <div id="flowsheet" class="flowsheet" tabindex="0" role="group"
+             aria-label="Chart over time. Use the left and right arrow keys to move through time.">
+          <div id="dose-rows"></div>
+          <div id="strips"></div>
+          <div class="strip axis">
+            <div class="strip-label"></div>
+            <div class="strip-plot" id="axis-plot"><svg id="axis-svg" aria-hidden="true"></svg></div>
+            <div class="strip-value"></div>
+          </div>
+          <div id="cursor" class="cursor" hidden></div>
+        </div>
+
+        <div id="moment" class="moment" hidden>
+          <p id="moment-time" class="moment-time"></p>
+          <div class="moment-actions">
+            <button type="button" id="moment-fork" class="primary">Try something else from here</button>
+            <button type="button" id="moment-back">Go back to this moment</button>
+            <button type="button" id="moment-close">Close</button>
+          </div>
+          <p class="hint">Trying something else keeps this path, so you can compare the two on identical bodies. Going back forgets everything after this moment.</p>
+        </div>
+
+        <p class="legend">
+          <span class="key key-line"></span> The middle of the virtual people.
+          <span class="key key-band"></span> Where most of them fall.
+          <span class="key key-dose"></span> A dose.
+          <span class="key key-limit"></span> A threshold, such as fever.
+          <span id="legend-compare" hidden><span class="key key-ghost"></span> The path you are comparing with.</span>
+          Click anywhere on the chart to look at that moment.
+        </p>
+
+        <details class="more shown-picker">
+          <summary>Choose what to show</summary>
+          <div id="shown-list" class="shown-list"></div>
+        </details>
+        </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <p id="announcer" class="sr-only" aria-live="polite"></p>
+  <noscript><p class="error">This page needs JavaScript. The API is still available at /docs.</p></noscript>
+</body>
+</html>

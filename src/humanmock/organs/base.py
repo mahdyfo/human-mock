@@ -28,6 +28,10 @@ PER_DRUG = "drug"
 PER_PATHOGEN = "pathogen"
 
 
+def _readable(name: str) -> str:
+    return name.replace("_", " ").capitalize()
+
+
 @dataclass(frozen=True)
 class StateDef:
     """One thing the body keeps track of over time."""
@@ -43,10 +47,18 @@ class StateDef:
     """A patient parameter that sets the starting value instead of init."""
     center: float = 0.0
     scale: float = 1.0
+    label: str = ""
+    """What the web UI calls this state. Leave it out to use the name."""
+    internal: bool = True
+    """Whether the web UI lists it as something inside the body. Turn this off for a state a measurement already shows."""
 
     @property
     def size(self) -> int:
         return {None: 1, PER_DRUG: MAX_DRUGS, PER_PATHOGEN: KNOWLEDGE.n_pathogens}[self.per]
+
+    @property
+    def title(self) -> str:
+        return self.label or _readable(self.name)
 
 
 @dataclass(frozen=True)
@@ -61,6 +73,20 @@ class Measurement:
     """Largest correction the observation network may apply. Zero reads the equations directly."""
     public: bool = True
     """Whether API responses list it under observations."""
+    label: str = ""
+    """What the web UI calls this measurement. Leave it out to use the name."""
+    body_part: str = ""
+    """Where the body diagram shows it: head, throat, lungs, heart, liver, gut, kidneys, skin, or blood."""
+    healthy: float = 0.0
+    """The value that shows no colour on the body diagram."""
+    severe: float = 10.0
+    """The value that shows full colour on the body diagram."""
+    germs: bool = False
+    """Whether the body diagram draws it as germs rather than as colour."""
+
+    @property
+    def title(self) -> str:
+        return self.label or _readable(self.name)
 
 
 @dataclass(frozen=True)
@@ -73,6 +99,17 @@ class Share:
     softness: float
     """How gradually the threshold applies during training. Responses use a hard cut-off."""
     noise: float = 0.1
+    label: str = ""
+    """What the web UI calls this share. Leave it out to use the name."""
+
+    @property
+    def key(self) -> str:
+        """The name used under share_of_people in API responses."""
+        return self.name.replace("_fraction", "")
+
+    @property
+    def title(self) -> str:
+        return self.label or _readable(self.key)
 
 
 @dataclass(frozen=True)

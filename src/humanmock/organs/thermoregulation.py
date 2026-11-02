@@ -27,14 +27,14 @@ def observables(s, c, e):
 ORGAN = Organ(
     name="thermoregulation",
     description="Fever follows a cytokine-driven set point, and antipyretic drugs lower that drive.",
-    states=(StateDef("temperature", FREE, rate_scale=0.5, init_from="body_temp_c", center=37.0, scale=1.0),),
+    states=(StateDef("temperature", FREE, rate_scale=0.5, init_from="body_temp_c", center=37.0, scale=1.0, internal=False),),
     neighbors=("inflammation", "pharmacology"),
     derivative=derivative,
     observables=observables,
     measurements=(
-        Measurement("temperature_c", "degrees C", noise=0.3, neural_range=0.5),
-        Measurement("heart_rate_bpm", "beats per minute", noise=6.0, neural_range=8.0),
-        Measurement("respiratory_rate_bpm", "breaths per minute", noise=2.0, neural_range=3.0),
+        Measurement("temperature_c", "degrees C", noise=0.3, neural_range=0.5, label="Temperature", body_part="skin", healthy=37.5, severe=40.5),
+        Measurement("heart_rate_bpm", "beats per minute", noise=6.0, neural_range=8.0, label="Heart rate", body_part="heart", healthy=90.0, severe=150.0),
+        Measurement("respiratory_rate_bpm", "breaths per minute", noise=2.0, neural_range=3.0, label="Breathing rate", body_part="lungs", healthy=20.0, severe=35.0),
     ),
-    shares=(Share("fever_fraction", "temperature_c", 38.0, 0.15, noise=0.1),),
+    shares=(Share("fever_fraction", "temperature_c", 38.0, 0.15, noise=0.1, label="Fever"),),
 )

@@ -27,16 +27,16 @@ ORGAN = Organ(
     name="systemic",
     description="Slow whole-body states that make side effects and overdoses visible.",
     states=(
-        StateDef("fatigue", LEVEL, rate_scale=0.03),
-        StateDef("dysbiosis", FRACTION, rate_scale=0.005),
-        StateDef("toxicity", FRACTION, rate_scale=0.01),
+        StateDef("fatigue", LEVEL, rate_scale=0.03, internal=False),
+        StateDef("dysbiosis", FRACTION, rate_scale=0.005, label="Gut flora disturbance"),
+        StateDef("toxicity", FRACTION, rate_scale=0.01, internal=False),
     ),
     neighbors=("inflammation", "pharmacology", "thermoregulation"),
     derivative=derivative,
     observables=observables,
     measurements=(
-        Measurement("fatigue_0_10", "score 0 to 10", noise=1.0, neural_range=2.0),
-        Measurement("diarrhea_0_10", "score 0 to 10", noise=1.0, neural_range=2.0),
-        Measurement("toxicity_index_0_1", "index 0 to 1", noise=0.1),
+        Measurement("fatigue_0_10", "score 0 to 10", noise=1.0, neural_range=2.0, label="Fatigue", body_part="skin", severe=10.0),
+        Measurement("diarrhea_0_10", "score 0 to 10", noise=1.0, neural_range=2.0, label="Diarrhea", body_part="gut", severe=8.0),
+        Measurement("toxicity_index_0_1", "index 0 to 1", noise=0.1, label="Organ stress", body_part="liver", severe=0.6),
     ),
 )

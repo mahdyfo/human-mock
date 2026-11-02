@@ -12,19 +12,19 @@
 patient:
   age_years:            {center: 45,   scale: 20,  min: 12,   max: 90,  note: "Age in years"}
   sex_female:           {center: 0.5,  scale: 0.5, note: "1 for female and 0 for male. Callers send sex as text."}
-  weight_kg:            {center: 75,   scale: 20,  min: 25,   max: 250, note: "Body weight"}
-  height_cm:            {center: 168,  scale: 12,  min: 120,  max: 220, note: "Height"}
-  creatinine_mg_dl:     {center: 0.9,  scale: 0.3, min: 0.2,  max: 12,  note: "Serum creatinine, used to estimate kidney function"}
-  alt_u_l:              {center: 22,   scale: 15,  min: 3,    max: 400, note: "Alanine aminotransferase, a liver blood test"}
-  heart_rate_bpm:       {center: 72,   scale: 12,  min: 40,   max: 130, note: "Resting heart rate"}
-  respiratory_rate_bpm: {center: 15,   scale: 3,   min: 8,    max: 30,  note: "Resting breathing rate", prior: [normal, 15.0, 2.0], source: assumption}
-  wbc_k_ul:             {center: 7,    scale: 2.5, min: 1.5,  max: 25,  note: "White cell count"}
-  crp_mg_l:             {center: 2,    scale: 5,   min: 0.05, max: 60,  note: "C-reactive protein"}
-  body_temp_c:          {center: 36.7, scale: 0.4, min: 35.5, max: 37.8, note: "Temperature when healthy", prior: [normal, 36.7, 0.25], source: assumption}
-  systolic_bp_mmhg:     {center: 120,  scale: 18,  min: 70,   max: 220, note: "Systolic blood pressure"}
-  diastolic_bp_mmhg:    {center: 72,   scale: 12,  min: 30,   max: 130, note: "Diastolic blood pressure"}
-  immune_function:      {center: 1,    scale: 0.3, min: 0.05, max: 2,   note: "1.0 is typical, lower means weaker immunity", prior: [lognormal, 0.0, 0.2], source: assumption}
-  hepatic_function:     {center: 1,    scale: 0.3, min: 0.05, max: 1.5, note: "1.0 is typical, lower means weaker liver clearance", prior: [lognormal, 0.0, 0.1], source: assumption}
+  weight_kg:            {center: 75,   scale: 20,  min: 25,   max: 250, note: "Body weight in kg"}
+  height_cm:            {center: 168,  scale: 12,  min: 120,  max: 220, note: "Height in cm"}
+  creatinine_mg_dl:     {center: 0.9,  scale: 0.3, min: 0.2,  max: 12,  note: "Blood creatinine in mg/dL, a kidney test"}
+  alt_u_l:              {center: 22,   scale: 15,  min: 3,    max: 400, note: "ALT in U/L, a liver test"}
+  heart_rate_bpm:       {center: 72,   scale: 12,  min: 40,   max: 130, note: "Resting heart rate per minute"}
+  respiratory_rate_bpm: {center: 15,   scale: 3,   min: 8,    max: 30,  note: "Resting breaths per minute", prior: [normal, 15.0, 2.0], source: assumption}
+  wbc_k_ul:             {center: 7,    scale: 2.5, min: 1.5,  max: 25,  note: "White cells, thousand per microlitre"}
+  crp_mg_l:             {center: 2,    scale: 5,   min: 0.05, max: 60,  note: "C-reactive protein in mg/L"}
+  body_temp_c:          {center: 36.7, scale: 0.4, min: 35.5, max: 37.8, note: "Temperature when healthy, in degrees C", prior: [normal, 36.7, 0.25], source: assumption}
+  systolic_bp_mmhg:     {center: 120,  scale: 18,  min: 70,   max: 220, note: "Blood pressure, upper number"}
+  diastolic_bp_mmhg:    {center: 72,   scale: 12,  min: 30,   max: 130, note: "Blood pressure, lower number"}
+  immune_function:      {center: 1,    scale: 0.3, min: 0.05, max: 2,   note: "Immune strength, where 1 is typical", prior: [lognormal, 0.0, 0.2], source: assumption}
+  hepatic_function:     {center: 1,    scale: 0.3, min: 0.05, max: 1.5, note: "Liver clearance, where 1 is typical", prior: [lognormal, 0.0, 0.1], source: assumption}
 
 system:
   k_innate_on:        {value: 0.15,    iiv: 0.25, source: assumption, note: "innate activation rate per hour"}

@@ -24,15 +24,15 @@ ORGAN = Organ(
     name="inflammation",
     description="Cytokine drive, C-reactive protein, and white cell count.",
     states=(
-        StateDef("cytokine", LEVEL, rate_scale=0.1, scale=1.0),
-        StateDef("crp", LEVEL, rate_scale=2.0, init_from="crp_mg_l", center=10.0, scale=30.0),
-        StateDef("wbc", LEVEL, rate_scale=0.3, init_from="wbc_k_ul", center=7.0, scale=4.0),
+        StateDef("cytokine", LEVEL, rate_scale=0.1, scale=1.0, label="Cytokines"),
+        StateDef("crp", LEVEL, rate_scale=2.0, init_from="crp_mg_l", center=10.0, scale=30.0, internal=False),
+        StateDef("wbc", LEVEL, rate_scale=0.3, init_from="wbc_k_ul", center=7.0, scale=4.0, internal=False),
     ),
     neighbors=("immunity", "throat", "thermoregulation"),
     derivative=derivative,
     observables=observables,
     measurements=(
-        Measurement("crp_mg_l", "mg per litre", noise=8.0, neural_range=15.0),
-        Measurement("wbc_k_ul", "thousand cells per microlitre", noise=1.5, neural_range=2.0),
+        Measurement("crp_mg_l", "mg per litre", noise=8.0, neural_range=15.0, label="C-reactive protein", body_part="blood", healthy=10.0, severe=150.0),
+        Measurement("wbc_k_ul", "thousand cells per microlitre", noise=1.5, neural_range=2.0, label="White blood cells", body_part="blood", healthy=11.0, severe=25.0),
     ),
 )

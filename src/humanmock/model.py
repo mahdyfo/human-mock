@@ -168,6 +168,36 @@ class _Signals(dict):
         )
 
 
+def describe_body() -> list[dict]:
+    """The body's own declarations, so anything added to it can appear in a UI by itself."""
+    return [
+        {
+            "name": organ.name,
+            "description": organ.description,
+            "measurements": [
+                {
+                    "name": m.name,
+                    "label": m.title,
+                    "unit": m.unit,
+                    "noise": m.noise,
+                    "body_part": m.body_part,
+                    "healthy": m.healthy,
+                    "severe": m.severe,
+                    "germs": m.germs,
+                }
+                for m in organ.measurements
+                if m.public
+            ],
+            "states": [{"name": st.name, "label": st.title, "per": st.per} for st in organ.states if st.internal],
+            "shares": [
+                {"key": s.key, "label": s.title, "measurement": s.measurement, "threshold": s.threshold}
+                for s in organ.shares
+            ],
+        }
+        for organ in ORGANS
+    ]
+
+
 def _publish_signals(s, c: Context) -> _Signals:
     e = _Signals()
     for organ in ORGANS:

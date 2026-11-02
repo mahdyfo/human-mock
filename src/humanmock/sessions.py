@@ -32,6 +32,10 @@ from humanmock.population import PatientError
 
 MAX_STEP_HOURS = 24.0 * 90
 MAX_EVENTS_PER_STEP = 500
+OVERDOSE_WARNING = (
+    "This simulator cannot show severe poisoning or death, so recovering here says nothing about real safety. "
+    "If someone has really taken too much, contact emergency services or a poison centre now."
+)
 _DURATION = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*(m|min|h|hr|hours?|d|days?)?\s*$", re.IGNORECASE)
 
 
@@ -167,9 +171,11 @@ class SessionStore:
 
     def fork(self, session_id: str, new_id: str, from_step: int) -> None:
         with self._connect() as db:
+            model_id, spec = db.execute("SELECT model_id, spec FROM sessions WHERE id=?", (session_id,)).fetchone()
+            spec = {**json.loads(spec), "forked_from": {"session_id": session_id, "step": from_step}}
             db.execute(
-                "INSERT INTO sessions SELECT ?, ?, model_id, spec, ? FROM sessions WHERE id=?",
-                (new_id, time.time(), from_step, session_id),
+                "INSERT INTO sessions VALUES (?,?,?,?,?)",
+                (new_id, time.time(), model_id, json.dumps(spec), from_step),
             )
             db.execute(
                 """INSERT INTO snapshots SELECT ?, step, time_hours, request, report, particles
@@ -193,8 +199,27 @@ class SessionStore:
 
     def list_ids(self) -> list[dict[str, Any]]:
         with self._connect() as db:
-            rows = db.execute("SELECT id, created_at, current_step FROM sessions ORDER BY created_at DESC").fetchall()
-        return [{"session_id": r[0], "created_at": r[1], "current_step": r[2]} for r in rows]
+            rows = db.execute(
+                """SELECT s.id, s.created_at, s.current_step, s.spec, s.model_id, n.time_hours
+                   FROM sessions s JOIN snapshots n ON n.session_id = s.id AND n.step = s.current_step
+                   ORDER BY s.created_at DESC"""
+            ).fetchall()
+        out = []
+        for row in rows:
+            spec = json.loads(row[3])
+            out.append(
+                {
+                    "session_id": row[0],
+                    "created_at": row[1],
+                    "current_step": row[2],
+                    "time_hours": row[5],
+                    "model_id": row[4],
+                    "patient": spec.get("patient", {}),
+                    "conditions": spec.get("conditions", []),
+                    "forked_from": spec.get("forked_from"),
+                }
+            )
+        return out
 
 
 class SessionManager:
@@ -270,9 +295,11 @@ class SessionManager:
             if limits:
                 if mg > limits["max_single_dose_mg"]:
                     warnings.append(f"{drug} {mg:g} mg exceeds the single-dose warning level of {limits['max_single_dose_mg']:g} mg.")
+                    warnings.append(OVERDOSE_WARNING)
                 daily = sum(m for t, d, m in log if d == drug and at - 24.0 < t <= at)
                 if daily > limits["max_daily_dose_mg"]:
                     warnings.append(f"{drug} reaches {daily:g} mg in 24 h, above the warning level of {limits['max_daily_dose_mg']:g} mg.")
+                    warnings.append(OVERDOSE_WARNING)
         return sorted(set(warnings))
 
     def _result(self, session_id, step, time_hours, p, spec, book, log, include_internal, warnings):
@@ -346,8 +373,10 @@ class SessionManager:
             {
                 "patient": spec["patient"],
                 "conditions": spec.get("conditions", []),
+                "custom_drugs": spec.get("custom_drugs", []),
                 "seed": spec["seed"],
                 "imputed_parameters": spec["imputed"],
+                "forked_from": spec.get("forked_from"),
             }
         )
         return result

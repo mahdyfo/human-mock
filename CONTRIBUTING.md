@@ -16,6 +16,7 @@ be enough.
 | Knowledge of how an organ works | [Add an organ](#add-an-organ) | One Python file, two lines in a list, and YAML |
 | A known fact about how bodies behave | [Add a behaviour test](#add-a-behaviour-test) | A short test |
 | Machine learning experience | Improve training in `src/humanmock/training/train.py` | Python |
+| Web skills | Improve the page in `src/humanmock/ui/` | Plain HTML, CSS, and JavaScript with no build step |
 
 Run this for a list of constants that still need a cited source:
 
@@ -149,7 +150,7 @@ gives the organ:
 
 - A neural cell and four memory neurons, which start silent.
 - A place in `include_internal` for each state.
-- API output and a data column for each `Measurement`.
+- API output, a data column, and a chart on the web page for each `Measurement`.
 - A place in `share_of_people` for each `Share`.
 - Automatic checks in `tests/test_contract.py`.
 
@@ -167,6 +168,11 @@ Choose these with care:
   physiological links, because they limit what the network can invent.
 - **`neural_range`** is the largest correction the network may make to a measurement.
   Leave it at zero for anything read directly, such as a lab value.
+- **`label`** is what people see on the web page. List an organ's main measurement first,
+  because the page charts that one by default.
+- **`body_part`** puts a measurement on the body diagram. It colours that part from no
+  colour at `healthy` to full colour at `severe`. To draw a new part, add it to `PARTS` in
+  `src/humanmock/ui/body.js`.
 
 ## Add a behaviour test
 

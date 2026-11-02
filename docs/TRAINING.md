@@ -323,3 +323,6 @@ More generally:
   nothing about how close this model is to real people.
 - **The body covers one illness.** Other illnesses need new organ modules and data.
   See CONTRIBUTING.md.
+- **Nobody can die in it.** Severe poisoning is far too mild. After 15 g of paracetamol,
+  which can kill a real person, the model shows a small rise in organ stress and full
+  recovery. Doses above the warning levels carry a warning saying so.

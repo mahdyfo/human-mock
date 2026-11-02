@@ -71,13 +71,13 @@ ORGAN = Organ(
     name="pathogen",
     description="Pathogen load by slot on the surface and in a protected reservoir.",
     states=(
-        StateDef("log_surface", COUNT, rate_scale=0.3, per=PER_PATHOGEN, init=EXTINCT_LOG10, center=3.0, scale=4.0),
-        StateDef("log_reservoir", COUNT, rate_scale=0.1, per=PER_PATHOGEN, init=EXTINCT_LOG10, center=1.0, scale=3.0),
+        StateDef("log_surface", COUNT, rate_scale=0.3, per=PER_PATHOGEN, init=EXTINCT_LOG10, center=3.0, scale=4.0, label="Germs on the throat, log10"),
+        StateDef("log_reservoir", COUNT, rate_scale=0.1, per=PER_PATHOGEN, init=EXTINCT_LOG10, center=1.0, scale=3.0, label="Germs hidden in tissue, log10"),
     ),
     neighbors=("pharmacology", "immunity", "throat"),
     derivative=derivative,
     signals=signals,
     observables=observables,
-    measurements=(Measurement("throat_culture_log10_cfu", "log10 colony forming units", noise=1.0),),
-    shares=(Share("culture_positive_fraction", "throat_culture_log10_cfu", 2.0, 0.3, noise=0.05),),
+    measurements=(Measurement("throat_culture_log10_cfu", "log10 colony forming units", noise=1.0, label="Throat culture", body_part="throat", healthy=1.0, severe=8.0, germs=True),),
+    shares=(Share("culture_positive_fraction", "throat_culture_log10_cfu", 2.0, 0.3, noise=0.05, label="Positive culture"),),
 )
