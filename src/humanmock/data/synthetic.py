@@ -17,7 +17,7 @@ import pandas as pd
 
 from humanmock.engine import DrugBook, Simulator
 from humanmock.knowledge import DRUG_FIELDS, KNOWLEDGE
-from humanmock.model import LAYOUT, OBS_INDEX, BodyModel
+from humanmock.model import COV_INDEX, COVARIATES, LAYOUT, OBS_INDEX, BodyModel
 
 class HiddenTruthBody(BodyModel):
     """A body with extra laws. Neither the equations nor the networks are told about them."""
@@ -38,9 +38,11 @@ class HiddenTruthBody(BodyModel):
         return d
 
 
-def hidden_truth_model(key) -> HiddenTruthBody:
+def hidden_truth_model(key, person_variation: float = 1.0) -> HiddenTruthBody:
+    """person_variation scales the unexplained differences between people. 1 is the full spread."""
     base = BodyModel.create(key)
     fields = {f.name: getattr(base, f.name) for f in dataclasses.fields(base)}
+    fields["log_iiv"] = jnp.full_like(fields["log_iiv"], np.log(person_variation))
     # The true constants also differ from the textbook ones.
     change_sys = {"k_heal": np.log(1.5), "pain_tissue": np.log(0.75), "k_crp_prod": np.log(0.8), "fever_max": np.log(0.9)}
     log_sys = np.array(fields["log_sys"])
@@ -64,10 +66,24 @@ NOISE = {
 }
 
 
-def generate(out_dir: Path, subjects: int = 300, seed: int = 0, val_fraction: float = 0.25) -> dict:
-    """Writes synthetic subjects in the canonical format."""
+def generate(
+    out_dir: Path,
+    subjects: int = 300,
+    seed: int = 0,
+    val_fraction: float = 0.25,
+    person_variation: float = 0.2,
+    noise_scale: float = 0.5,
+    scenarios: tuple[str, ...] = ("paracetamol_pk", "amoxicillin_pk", "strep_untreated", "strep_treated", "viral"),
+) -> dict:
+    """Writes synthetic subjects in the canonical format.
+
+    Every parameter of every person is recorded, and unexplained differences between
+    people are small, so what separates the data from the equations is mostly the
+    hidden laws. With the full spread those laws are lost in the noise, and the hidden
+    truth itself scores no better than an untrained body, so nothing could be learned.
+    """
     rng = np.random.default_rng(seed)
-    truth = hidden_truth_model(jax.random.PRNGKey(seed + 1))
+    truth = hidden_truth_model(jax.random.PRNGKey(seed + 1), person_variation)
     sim = Simulator(members=[truth], meta={"status": "synthetic_truth", "model_id": "hidden-truth"})
     book = DrugBook.build()
     rows_s, rows_e, rows_o = [], [], []
@@ -76,7 +92,7 @@ def generate(out_dir: Path, subjects: int = 300, seed: int = 0, val_fraction: fl
         age = float(rng.uniform(18, 80))
         sex = "female" if rng.random() < 0.5 else "male"
         weight = float(np.clip(rng.normal(77, 15), 45, 130))
-        scenario = rng.choice(["paracetamol_pk", "amoxicillin_pk", "strep_untreated", "strep_treated", "viral"])
+        scenario = rng.choice(scenarios)
         conditions, onset = [], ""
         if scenario.startswith("strep"):
             conditions = [{"name": "strep_a", "days_since_symptom_onset": 1.0}]
@@ -114,6 +130,7 @@ def generate(out_dir: Path, subjects: int = 300, seed: int = 0, val_fraction: fl
                 "conditions": onset,
                 "split": "val" if i < subjects * val_fraction else "train",
                 "notes": "SYNTHETIC, not evidence about real humans",
+                **{n: float(p.cov[0, COV_INDEX[n]]) for n in COVARIATES if n not in ("age_years", "sex_female", "weight_kg")},
             }
         )
         for at, drug, mg in doses:
@@ -136,7 +153,7 @@ def generate(out_dir: Path, subjects: int = 300, seed: int = 0, val_fraction: fl
                 else:
                     value = obs[OBS_INDEX[variable]]
                     name = variable
-                measured = float(value + rng.normal(0, NOISE[variable]))
+                measured = float(value + rng.normal(0, NOISE[variable] * noise_scale))
                 rows_o.append({"subject_id": sid, "time_h": now, "variable": name, "value": max(measured, 0.0)})
 
     out_dir.mkdir(parents=True, exist_ok=True)

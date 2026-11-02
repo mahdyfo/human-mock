@@ -130,5 +130,6 @@ def run(raw_dir: Path, output: Path) -> dict:
     download(raw_dir)
     model = fit(raw_dir)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(model, indent=1), encoding="utf8")
+    # Fixed line endings, so refitting on any system leaves this tracked file unchanged.
+    output.write_text(json.dumps(model, indent=1), encoding="utf8", newline="\n")
     return model

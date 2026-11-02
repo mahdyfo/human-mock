@@ -386,13 +386,61 @@ class SolverConfig:
 
 
 SERVE_SOLVER = SolverConfig()
-TRAIN_SOLVER = SolverConfig(rtol=1e-3, atol=1e-3, dtmax=2.0, max_steps=512)
+# The largest step must stay inside the solver's stability limit for the fastest states.
+# At 2 h, gradients reach 100 million. At 1 h they are about 5, and they match 0.5 h.
+TRAIN_SOLVER = SolverConfig(rtol=1e-3, atol=1e-3, dtmax=1.0, max_steps=2048)
+
+
+# Gradients through the solver stay meaningful only with these protections, along with
+# the largest step in TRAIN_SOLVER.
+#
+# A fast state near zero, such as a drug nobody has taken, shows the adaptive solver
+# no error, so the solver may take steps too long for that state. Going forward this
+# is harmless. Going backward, that state's gradient grows on every step. It can reach
+# hundreds of millions and drown every real signal, or overflow, and then infinity
+# times zero turns every gradient into NaN. Forward results are never affected.
+GRADIENT_LIMIT = 1e6
+UNRESOLVED_TOLERANCES = 10.0
+_IS_AMOUNT = np.zeros(LAYOUT.size, dtype=bool)
+for _name, _offset, _size, _state, _ in LAYOUT.entries:
+    _IS_AMOUNT[_offset : _offset + _size] = _state.kind == AMOUNT
+
+
+@jax.custom_vjp
+def _limit_gradient(y):
+    """Leaves values alone and keeps gradients through them finite, as a safety net."""
+    return y
+
+
+def _limit_gradient_forward(y):
+    return y, None
+
+
+def _limit_gradient_backward(_, gradient):
+    return (jnp.clip(jnp.nan_to_num(gradient, nan=0.0), -GRADIENT_LIMIT, GRADIENT_LIMIT),)
+
+
+_limit_gradient.defvjp(_limit_gradient_forward, _limit_gradient_backward)
+
+
+def _stable_gradients(y, atol):
+    """Blocks gradients through amounts too small for the solver to resolve.
+
+    Below its error tolerance the solver is not tracking an amount, so that value is
+    numerical noise and no real signal passes through it.
+    """
+    unresolved = jnp.logical_and(jnp.asarray(_IS_AMOUNT), jnp.abs(y) < UNRESOLVED_TOLERANCES * atol)
+    return _limit_gradient(jnp.where(unresolved, jax.lax.stop_gradient(y), y))
 
 
 def advance(model: BodyModel, y, c: Context, dt, cfg: SolverConfig = SERVE_SOLVER):
     """Integrates one person forward by dt hours."""
     dt_safe = jnp.maximum(dt, 1e-3)
-    term = diffrax.ODETerm(lambda t, state, args: model.vector_field(t, state, args))
+    if cfg.stiff:
+        # An implicit solver needs forward derivatives, and it does not have this problem.
+        term = diffrax.ODETerm(lambda t, state, args: model.vector_field(t, state, args))
+    else:
+        term = diffrax.ODETerm(lambda t, state, args: model.vector_field(t, _stable_gradients(state, cfg.atol), args))
     solver = diffrax.Kvaerno5() if cfg.stiff else diffrax.Tsit5()
     sol = diffrax.diffeqsolve(
         term,

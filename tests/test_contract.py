@@ -6,16 +6,20 @@ A failure here means a contribution does not fit the body yet.
 
 import dataclasses
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pandas as pd
 import pytest
 
 import humanmock.model as model_module
+from humanmock.data.formats import read_source, sample_people
 from humanmock.knowledge import DRUG_FIELDS, KNOWLEDGE, MAX_DRUGS, RAW, SPARE_DRUG_SLOTS, KnowledgeError, evidence_gaps, load_knowledge, validate_knowledge
-from humanmock.model import COV_CENTER, LAYOUT, OBS_NAMES, PUBLIC_OBSERVABLES, BodyModel, OrganError, _publish_signals, check_organs
+from humanmock.model import COV_CENTER, LAYOUT, OBS_NAMES, PUBLIC_OBSERVABLES, TRAIN_SOLVER, BodyModel, OrganError, _publish_signals, check_organs
 from humanmock.organs import ORGANS
 from humanmock.organs.base import FRACTION, Measurement, Organ, Share, StateDef
+from humanmock.training.train import Batcher, TrainConfig, _loss_batch
 
 BY_NAME = {o.name: o for o in ORGANS}
 
@@ -109,6 +113,46 @@ def test_values_cannot_be_mislabelled_by_the_order_an_organ_returns_them(body, m
     shuffled = dataclasses.replace(organ, observables=reversed_order)
     monkeypatch.setattr(model_module, "ORGANS", tuple(shuffled if o is organ else o for o in ORGANS))
     assert np.array_equal(np.asarray(model.observe(states["sick"], c)), expected)
+
+
+def test_gradients_through_a_long_illness_stay_a_sensible_size(tmp_path):
+    """Training only works if gradients stay meaningful, so this covers every organ.
+
+    If this fails after adding an organ, one of its states probably changes faster than
+    the training solver can follow, at more than about 2.5 per hour. Slow that state
+    down, or lower dtmax in TRAIN_SOLVER, which makes training slower.
+    """
+    pd.DataFrame(
+        [{"subject_id": "a", "study_id": "s", "age_years": 40, "weight_kg": 70, "conditions": f"{KNOWLEDGE.path_names[0]}:1"}]
+    ).to_csv(tmp_path / "subjects.csv", index=False)
+    pd.DataFrame(
+        [
+            {"subject_id": "a", "time_h": 8.0 * k, "type": "dose", "drug": KNOWLEDGE.drug_names[0], "dose_mg": 500, "route": "oral"}
+            for k in range(9)
+        ]
+    ).to_csv(tmp_path / "events.csv", index=False)
+    pd.DataFrame(
+        [
+            {"subject_id": "a", "time_h": t, "variable": name, "value": 1.0}
+            for t in (24, 96, 240)
+            for name in PUBLIC_OBSERVABLES
+        ]
+    ).to_csv(tmp_path / "observations.csv", index=False)
+    records = read_source(tmp_path)
+    sample_people(records, 4, 0)
+    batch = Batcher(records, 1, 0).collate(records, 32, 64)
+    model = BodyModel.create(jax.random.PRNGKey(0))
+
+    def loss(m):
+        return _loss_batch(m, batch, jax.random.PRNGKey(1), TrainConfig(), TRAIN_SOLVER)[0]
+
+    gradients = eqx.filter_jit(eqx.filter_grad(loss))(model)
+    leaves = [np.asarray(g) for g in jax.tree_util.tree_leaves(eqx.filter(gradients, eqx.is_inexact_array))]
+    assert all(np.isfinite(leaf).all() for leaf in leaves), "A gradient is not finite."
+    size = float(np.sqrt(sum((leaf**2).sum() for leaf in leaves)))
+    # These targets are far from any real value, which alone gives a size of about 1000.
+    # An unstable state gives hundreds of millions, so this limit separates the two clearly.
+    assert size < 1e5, f"The gradient size is {size:.3g}, which would stop training from working."
 
 
 def _organ(**changes) -> Organ:

@@ -30,6 +30,7 @@ from humanmock.model import OBS_NAMES, TRAIN_SOLVER, BodyModel, SolverConfig, ad
 
 _TABLE = jnp.asarray(KNOWLEDGE.drug_table)
 MONTE_CARLO_VARIANCE = 0.03**2
+PEOPLE_POOL = 8
 
 
 @dataclass(frozen=True)
@@ -89,8 +90,10 @@ def _subject_nll(model, b, key, cfg):
     pred, ok = predict_subject(model, b, key, cfg)
     noise = jnp.exp(model.log_obs_sigma)[b["obs_var"]]
     # A reported arm mean carries its own uncertainty, and an individual reading also has measurement noise.
+    # A group mean reported without an sd falls back on learned noise, so it is not treated as exact.
     # The small floor covers sampling noise from simulating a limited number of virtual people.
-    variance = b["obs_sd"] ** 2 + jnp.where(b["is_arm"], 0.0, noise**2) + MONTE_CARLO_VARIANCE
+    own_uncertainty = jnp.logical_and(b["is_arm"], b["obs_sd"] > 0)
+    variance = b["obs_sd"] ** 2 + jnp.where(own_uncertainty, 0.0, noise**2) + MONTE_CARLO_VARIANCE
     residual = (pred - b["obs_value"]) ** 2 / variance
     nll = 0.5 * residual + 0.5 * jnp.log(variance)
     return jnp.sum(nll * b["weight"] * b["mask"]), jnp.sum(b["weight"] * b["mask"]), ok
@@ -122,8 +125,9 @@ def _train_step(diff, static, opt_state, batch, key, optimizer, config, cfg):
 class Batcher:
     """Groups subjects with similar timelines, so each group compiles only once."""
 
-    def __init__(self, records: list[Record], batch_size: int, seed: int):
+    def __init__(self, records: list[Record], batch_size: int, seed: int, people: int | None = None):
         self.batch_size = batch_size
+        self.people = people
         self.rng = np.random.default_rng(seed)
         counts: dict[int, int] = {}
         for record in records:
@@ -147,13 +151,19 @@ class Batcher:
 
         return round_up(len(record.dt)), round_up(len(record.obs_value))
 
-    def collate(self, records: list[Record], T: int, K: int) -> dict[str, Any]:
+    def _people_of(self, record: Record, fresh: bool) -> np.ndarray:
+        count = self.people or len(record.cov)
+        if not fresh:
+            return record.cov[:count]  # Evaluation always scores the same people.
+        return record.cov[self.rng.choice(len(record.cov), count, replace=False)]
+
+    def collate(self, records: list[Record], T: int, K: int, fresh: bool = False) -> dict[str, Any]:
         def pad(array, length, value=0.0):
             shape = (length - array.shape[0],) + array.shape[1:]
             return np.concatenate([array, np.full(shape, value, dtype=array.dtype)], axis=0)
 
         out = {
-            "cov": np.stack([r.cov for r in records]),
+            "cov": np.stack([self._people_of(r, fresh) for r in records]),
             "path_slot": np.array([r.path_slot for r in records], dtype=np.int32),
             "onset_days": np.array([r.onset_days for r in records], dtype=np.float32),
             "is_arm": np.array([r.is_arm for r in records], dtype=bool),
@@ -180,7 +190,7 @@ class Batcher:
         key = self.keys[int(self.rng.choice(len(self.keys), p=self.probabilities))]
         pool = self.buckets[key]
         chosen = self.rng.choice(len(pool), self._size(pool), replace=False)
-        return self.collate([pool[i] for i in chosen], *key)
+        return self.collate([pool[i] for i in chosen], *key, fresh=True)
 
     def all_batches(self):
         """Every subject once, for evaluation. Short groups repeat with zero weight."""
@@ -198,10 +208,10 @@ class Batcher:
                 yield batch
 
 
-def evaluate_loss(model, records: list[Record], batch_size: int, key, cfg: SolverConfig) -> float:
+def evaluate_loss(model, records: list[Record], batch_size: int, key, cfg: SolverConfig, people: int | None = None) -> float:
     if not records:
         return float("nan")
-    batcher = Batcher(records, batch_size, 0)
+    batcher = Batcher(records, batch_size, 0, people)
     config = TrainConfig(prior_strength=0.0)
     total, weight = 0.0, 0.0
     for i, batch in enumerate(batcher.all_batches()):
@@ -226,9 +236,11 @@ def _predict_batch(model, batch, keys, cfg: SolverConfig):
     return jax.vmap(lambda b, k: predict_subject(model, b, k, cfg))(batch, keys)
 
 
-def per_variable_error(model, records: list[Record], batch_size: int, key, cfg: SolverConfig) -> dict[str, dict[str, float]]:
+def per_variable_error(
+    model, records: list[Record], batch_size: int, key, cfg: SolverConfig, people: int | None = None
+) -> dict[str, dict[str, float]]:
     """Plain-language score: typical error per measurement, in the measurement's own units."""
-    batcher = Batcher(records, batch_size, 0)
+    batcher = Batcher(records, batch_size, 0, people)
     errors: dict[int, list[float]] = {}
     for i, batch in enumerate(batcher.all_batches()):
         keys = jax.random.split(jax.random.fold_in(key, i), batch["dt"].shape[0])
@@ -266,11 +278,11 @@ def _run_stage(
         max_consecutive_errors=25,
     )
     opt_state = optimizer.init(diff)
-    batcher = Batcher(train, config.batch_size, config.seed)
+    batcher = Batcher(train, config.batch_size, config.seed, config.people)
 
     best = eqx.combine(diff, static)
     eval_key = jax.random.PRNGKey(config.seed + 1234)
-    best_score = evaluate_loss(best, val if val else train, config.batch_size, eval_key, cfg)
+    best_score = evaluate_loss(best, val if val else train, config.batch_size, eval_key, cfg, config.people)
     history = [{"stage": stage, "step": 0, "val": best_score}]
     log(f"  {stage}: starting validation score {best_score:.4f}")
     stale = 0
@@ -282,12 +294,14 @@ def _run_stage(
         )
         if step % config.eval_every == 0 or step == steps:
             current = eqx.combine(diff, static)
-            score = evaluate_loss(current, val if val else train, config.batch_size, eval_key, cfg)
+            score = evaluate_loss(current, val if val else train, config.batch_size, eval_key, cfg, config.people)
             improved = np.isfinite(score) and score < best_score - 1e-4
-            history.append({"stage": stage, "step": step, "train": float(data), "val": score})
+            skipped = int(opt_state.total_notfinite)
+            history.append({"stage": stage, "step": step, "train": float(data), "val": score, "skipped": skipped})
             log(
                 f"  {stage} step {step}/{steps}: train {float(data):.4f}, validation {score:.4f}"
                 f"{' *' if improved else ''}, {time.time() - started:.0f} s"
+                f"{f', {skipped} steps skipped' if skipped else ''}"
             )
             if improved:
                 best, best_score, stale = current, score, 0
@@ -296,6 +310,13 @@ def _run_stage(
                 if stale >= config.patience:
                     log(f"  {stage}: stopping early, validation stopped improving.")
                     break
+    # Steps with a non-finite gradient are skipped, which must never pass unnoticed.
+    skipped = int(opt_state.total_notfinite)
+    if skipped > 0.05 * step:
+        log(
+            f"  WARNING: {skipped} of {step} {stage} steps were skipped because a gradient was not finite. "
+            "This training did not really happen. Please report it as a bug."
+        )
     return best, history
 
 
@@ -341,7 +362,7 @@ def run_training(
     records = load_records(data_root, include_synthetic=include_synthetic, only=only_sources)
     if not records:
         raise SystemExit(f"No training data found under {data_root}. Run the data commands first.")
-    sample_people(records, config.people, config.seed)
+    sample_people(records, max(config.people * PEOPLE_POOL, 64), config.seed)
     assign_splits(records, config.seed, config.val_fraction, holdout_studies, holdout_drugs)
     train = [r for r in records if r.split == "train"]
     val = [r for r in records if r.split == "val"]
@@ -366,8 +387,8 @@ def run_training(
     for name, part in (("train", train), ("validation", val), ("holdout", holdout)):
         if part:
             scores[name] = {
-                "untrained": per_variable_error(prior, part, config.batch_size, key, TRAIN_SOLVER),
-                "trained": per_variable_error(trained[0], part, config.batch_size, key, TRAIN_SOLVER),
+                "untrained": per_variable_error(prior, part, config.batch_size, key, TRAIN_SOLVER, config.people),
+                "trained": per_variable_error(trained[0], part, config.batch_size, key, TRAIN_SOLVER, config.people),
             }
     meta = {
         "support": support_summary(records),

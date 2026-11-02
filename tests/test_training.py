@@ -4,7 +4,9 @@ from pathlib import Path
 
 import equinox as eqx
 import jax
+import jax.numpy as jnp
 import numpy as np
+import optax
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
@@ -20,11 +22,21 @@ from humanmock.data.formats import (
     sample_people,
     variable_index,
 )
-from humanmock.data.synthetic import generate
-from humanmock.engine import DrugBook
+from humanmock.data.synthetic import generate, hidden_truth_model
+from humanmock.engine import DrugBook, Simulator
 from humanmock.knowledge import KNOWLEDGE
 from humanmock.model import OBS_INDEX, TRAIN_SOLVER, BodyModel
-from humanmock.training.train import TrainConfig, evaluate_loss, per_variable_error, predict_subject, train_member, Batcher
+from humanmock.organs import ORGANS
+from humanmock.training.train import (
+    Batcher,
+    TrainConfig,
+    _run_stage,
+    _stage_filter,
+    _train_step,
+    per_variable_error,
+    predict_subject,
+    run_training,
+)
 
 LITERATURE = Path(__file__).parent.parent / "data" / "observations"
 
@@ -262,8 +274,6 @@ def test_sessions_from_an_old_model_ask_to_reset(tmp_path):
 
 
 def load_or_prior(_):
-    from humanmock.engine import Simulator
-
     return Simulator()
 
 
@@ -293,36 +303,122 @@ def test_trained_model_reports_when_a_request_leaves_its_training_data(tmp_path)
     assert older["support"]["within_training_support"] is False
 
 
+def _long_illness(tmp_path):
+    """Someone ill for a long stretch without any drug, which once froze all training."""
+    write_source(
+        tmp_path / "ill",
+        [{"subject_id": "a", "study_id": "s", "age_years": 40, "weight_kg": 70, "conditions": "viral_pharyngitis:1"}],
+        [],
+        [{"subject_id": "a", "time_h": t, "variable": "throat_pain_0_10", "value": 3.0} for t in (24, 96, 240)],
+    )
+    records = load_records(tmp_path)
+    sample_people(records, 4, 0)
+    return records
+
+
+def test_gradients_stay_finite_through_a_long_illness_without_drugs(tmp_path):
+    """An undosed drug is a fast state at exactly zero. Its gradient must not overflow."""
+    records = _long_illness(tmp_path)
+    batch = {k: v[0] for k, v in Batcher(records, 1, 0).collate(records, 8, 8).items()}
+    model = BodyModel.create(jax.random.PRNGKey(0))
+
+    def loss(m):
+        prediction, _ = predict_subject(m, batch, jax.random.PRNGKey(1), TRAIN_SOLVER)
+        return jnp.sum(prediction * batch["mask"])
+
+    gradients = eqx.filter_jit(eqx.filter_grad(loss))(model)
+    leaves = jax.tree_util.tree_leaves(eqx.filter(gradients, eqx.is_inexact_array))
+    assert all(np.isfinite(np.asarray(leaf)).all() for leaf in leaves)
+    # The neural cells must really receive a signal, or they can never learn.
+    cell_size = sum(float(jnp.abs(g).sum()) for g in jax.tree_util.tree_leaves(eqx.filter(gradients.cells, eqx.is_inexact_array)))
+    assert cell_size > 0.0
+
+
+def test_a_training_step_really_moves_the_neural_cells(tmp_path):
+    records = _long_illness(tmp_path)
+    batch = Batcher(records, 1, 0).collate(records, 8, 8)
+    model = BodyModel.create(jax.random.PRNGKey(0))
+    diff, static = eqx.partition(model, _stage_filter(model, "neural"))
+    optimizer = optax.apply_if_finite(optax.adam(0.002), max_consecutive_errors=25)
+    state = optimizer.init(diff)
+    config = TrainConfig()
+    new_diff, state, _, _ = _train_step(diff, static, state, batch, jax.random.PRNGKey(1), optimizer, config, TRAIN_SOLVER)
+    assert int(state.total_notfinite) == 0
+    moved = {o.name: float(jnp.abs(c.layers[-1].weight).max()) for o, c in zip(ORGANS, new_diff.cells)}
+    # This person only reports throat pain, so exactly the organs that drive pain should learn.
+    for organ in ("pathogen", "immunity", "inflammation", "throat"):
+        assert moved[organ] > 1e-4, moved
+
+
+def test_the_training_command_runs_from_data_to_a_served_model(tmp_path):
+    """The whole path a contributor uses, kept tiny so that it stays quick."""
+    data = tmp_path / "observations"
+    write_source(
+        data / "mine",
+        [{"subject_id": f"p{i}", "study_id": f"s{i}", "age_years": 40, "weight_kg": 70} for i in range(4)],
+        [{"subject_id": f"p{i}", "time_h": 0, "type": "dose", "drug": "paracetamol", "dose_mg": 1000, "route": "oral"} for i in range(4)],
+        [{"subject_id": f"p{i}", "time_h": 2, "variable": "conc_paracetamol_mg_l", "value": 9.0} for i in range(4)],
+    )
+    config = TrainConfig(calibration_steps=1, neural_steps=1, people=2, batch_size=2, eval_every=1)
+    meta = run_training(data, tmp_path / "ckpt", config, log=lambda _: None)
+    assert "conc_paracetamol_mg_l" in meta["scores"]["train"]["trained"]
+    assert meta["history"][0][-1]["skipped"] == 0
+    sim = load_simulator(tmp_path / "ckpt")
+    book = DrugBook.build()
+    p, _ = sim.create_particles({"age_years": 30}, [], book, 2, 1)
+    assert np.isfinite(sim.observe(sim.advance(p, book, 1.0, []), book)).all()
+
+
+def _how_much_higher_in_the_old(model) -> float:
+    """Paracetamol level in a 75 year old compared with a 25 year old, 6 h after a dose."""
+    sim = Simulator(members=[model], meta={"status": "trained", "model_id": "t"})
+    book = DrugBook.build()
+    levels = []
+    for age in (25, 75):
+        person = {"age_years": age, "sex": "male", "weight_kg": 75, "creatinine_mg_dl": 0.9}
+        p, _ = sim.create_particles(person, [], book, 32, 1)
+        p = sim.advance(p, book, 6.0, [{"type": "dose", "drug": "paracetamol", "dose_mg": 1000, "at_hours": 0}])
+        levels.append(float(np.median(sim.observe(p, book)[:, OBS_INDEX[slot_name("paracetamol")]])))
+    return levels[1] / levels[0]
+
+
 @pytest.mark.slow
-def test_training_discovers_hidden_biology(tmp_path):
+@pytest.mark.parametrize("seed", [3, 11])
+def test_neurons_discover_a_law_the_equations_do_not_contain(tmp_path, seed):
     """The real test of the whole idea.
 
-    Data comes from a body with laws the equations do not contain. Training must
-    then predict people it never saw better than the untrained body does.
+    In the practice data, older people clear paracetamol more slowly. No equation in
+    the body says so, and no single constant can express it, because it depends on age.
+    Calibration alone must therefore fall short, and only the neural parts can close
+    the gap, on people they never trained on.
     """
-    generate(tmp_path / "synthetic", subjects=64, seed=3)
+    generate(tmp_path / "synthetic", subjects=72, seed=seed, scenarios=("paracetamol_pk",))
     records = load_records(tmp_path, include_synthetic=True)
-    sample_people(records, 1, 0)
+    sample_people(records, 32, 0)
     assign_splits(records, 0)
     train = [r for r in records if r.split == "train"]
     val = [r for r in records if r.split == "val"]
-    config = TrainConfig(calibration_steps=30, neural_steps=20, batch_size=8, people=1, eval_every=10, patience=5)
-    key = jax.random.PRNGKey(0)
-    prior = BodyModel.create(jax.random.PRNGKey(0))
-    before = evaluate_loss(prior, val, 8, key, TRAIN_SOLVER)
-    trained, history = train_member(train, val, config, log=lambda _: None)
-    after = evaluate_loss(trained, val, 8, key, TRAIN_SOLVER)
-    assert np.isfinite(after)
-    assert after < before - 0.05, (before, after)
+    config = TrainConfig(batch_size=8, people=4, eval_every=25, patience=16)
+    key, k_cal, k_neural = jax.random.split(jax.random.PRNGKey(seed), 3)
+    quiet = lambda _: None  # noqa: E731
 
-    errors_before = per_variable_error(prior, val, 8, key, TRAIN_SOLVER)
-    errors_after = per_variable_error(trained, val, 8, key, TRAIN_SOLVER)
-    assert errors_after["throat_pain_0_10"]["rmse"] < errors_before["throat_pain_0_10"]["rmse"]
+    prior = BodyModel.create(jax.random.PRNGKey(0))
+    calibrated, h1 = _run_stage(prior, "calibration", 150, 0.02, train, val, config, TRAIN_SOLVER, k_cal, quiet)
+    neural, h2 = _run_stage(calibrated, "neural", 400, 0.002, train, val, config, TRAIN_SOLVER, k_neural, quiet)
+    truth = hidden_truth_model(jax.random.PRNGKey(seed + 1), 0.2)
+
+    def error(model):
+        return per_variable_error(model, val, 8, key, TRAIN_SOLVER, 4)["conc_paracetamol_mg_l"]["rmse"]
+
+    assert all(row.get("skipped", 0) == 0 for row in h1 + h2), "Training skipped steps."
+    assert error(neural) < 0.95 * error(calibrated), (error(prior), error(calibrated), error(neural), error(truth))
+
+    # The law itself must appear, rather than only a better score.
+    found, without, actual = (_how_much_higher_in_the_old(m) for m in (neural, calibrated, truth))
+    assert without + 0.3 * (actual - without) < found, (without, found, actual)
 
     # The trained body must still obey basic physics when served.
-    from humanmock.engine import Simulator
-
-    sim = Simulator(members=[trained], meta={"status": "trained", "model_id": "t"})
+    sim = Simulator(members=[neural], meta={"status": "trained", "model_id": "t"})
     book = DrugBook.build()
     p, _ = sim.create_particles({"age_years": 30, "weight_kg": 70}, [], book, 4, 1)
     later = sim.observe(sim.advance(p, book, 240.0, []), book)

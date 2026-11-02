@@ -1,5 +1,7 @@
 # humanmock
 
+[![tests](https://github.com/mahdyfo/human-mock/actions/workflows/tests.yml/badge.svg)](https://github.com/mahdyfo/human-mock/actions/workflows/tests.yml)
+
 An open, trainable simulator of human body behaviour, served through an API with
 session memory.
 
@@ -26,11 +28,26 @@ everything between calls until you reset it.
 - **Session memory.** Continue, reset, rewind, fork, and review. Sessions survive a
   server restart.
 
+## Help build it
+
+This is a starting point, and it improves when people add to it. Most contributions
+need no machine learning knowledge. One cited number from a paper is a real help.
+
+- **Find a task:** `humanmock evidence` lists every constant that still needs a source.
+- **Add data:** add three CSV files to a folder, then run `humanmock data check` on it.
+- **Add a drug or illness:** edit one YAML file.
+- **Add an organ:** write one Python file and add it to a list. It gets its own neural
+  cell, memory neurons, API output, and automatic checks.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) shows each of these step by step.
+
 ## Install
 
-Requires Python 3.11 or newer.
+Requires Python 3.11 or newer. On macOS or Linux, activate with `source .venv/bin/activate`.
 
 ```powershell
+git clone https://github.com/mahdyfo/human-mock
+cd human-mock
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
@@ -171,3 +188,8 @@ humanmock serve --checkpoint checkpoints/run1
 
 Every constant is listed with its source in
 `src/humanmock/knowledge_data/physiology.yaml`.
+
+## Licence
+
+The code is released under the [MIT licence](LICENSE). Downloaded datasets keep their
+own licences, which is why they are not stored in this repository.

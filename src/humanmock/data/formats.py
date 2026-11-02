@@ -276,7 +276,12 @@ def load_records(root: Path, include_synthetic: bool = False, only: list[str] | 
 
 
 def sample_people(records: list[Record], people: int, seed: int, population: Population | None = None) -> None:
-    """Gives each record its own virtual people, filling in whatever the source did not report."""
+    """Gives each record a pool of virtual people, filling in whatever the source did not report.
+
+    Training draws fresh people from this pool at every step. A value a study never
+    reported is only a guess, so it must keep changing, or the networks could memorise
+    it as a way to recognise that subject.
+    """
     population = population or Population()
     rng = np.random.default_rng(seed)
     for record in records:

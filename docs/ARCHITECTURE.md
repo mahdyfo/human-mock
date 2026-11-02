@@ -80,7 +80,8 @@ the differential equation is solved with an adaptive method. This makes advancin
 | Path | Purpose |
 |---|---|
 | `src/humanmock/organs/` | The biology, one file per organ |
-| `src/humanmock/knowledge_data/physiology.yaml` | Every constant, with its source |
+| `src/humanmock/knowledge_data/physiology.yaml` | Patient parameters, constants, illnesses, and drugs, with sources |
+| `examples/add_an_organ/` | A complete worked example of adding an organ |
 | `src/humanmock/model.py` | Assembles organs and networks into one equation |
 | `src/humanmock/population.py` | Fills in missing parameters |
 | `src/humanmock/engine.py` | Runs virtual people through time |
@@ -89,3 +90,22 @@ the differential equation is solved with an adaptive method. This makes advancin
 | `src/humanmock/data/` | Downloads and converters |
 | `src/humanmock/training/train.py` | The training loop |
 | `scripts/behaviour_report.py` | Standard scenarios against known targets |
+| `tests/test_contract.py` | Rules every organ and constant must follow, applied automatically |
+| `tests/test_contributor_guide.py` | Follows the contributor guide, so it cannot go out of date |
+
+## How contributions plug in
+
+Everything outside `organs/` and `physiology.yaml` reads their declarations, so biology
+can grow without changing the rest of the code.
+
+| Declared in | Reaches |
+|---|---|
+| `StateDef` in an organ | The solver, a neural cell, the physics gates, and `include_internal` |
+| `Measurement` in an organ | The observation network, data files, training, and API responses |
+| `Share` in an organ | Trial outcomes in data files, and `share_of_people` in responses |
+| `patient:` in the YAML | The API, data files, missing value sampling, and the patient encoder |
+| `drugs:` in the YAML | The API, data files, and the number of drug slots |
+| `pathogens:` in the YAML | The API, data files, and every per-pathogen state |
+
+Each of these changes the shape of the body, so a trained model records the shape it
+was trained on and refuses to load into a different one.
